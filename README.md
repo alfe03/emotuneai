@@ -40,7 +40,7 @@ source venv/bin/activate
 ### 3. Bağımlılıkları yükle
 
 ```bash
-pip install -r requirements.txt
+venv\Scripts\python -m pip install -r requirements.txt
 ```
 
 ### 4. Ortam değişkenlerini ayarla
@@ -148,6 +148,14 @@ backend/
 Python versiyonunu kontrol et. TensorFlow yalnızca Python 3.11 ve altını destekler.
 ```bash
 py -3.11 -m pip install -r requirements.txt
+```
+
+**`ModuleNotFoundError: No module named 'pkg_resources'`**
+Bu hata bazı paketlerin build aşamasında eski `pkg_resources` API'sini kullanmasından kaynaklanır.
+Projede bu yüzden `setuptools<81` sabitlendi. Elle düzeltmek için:
+```bash
+venv\Scripts\python -m pip install "setuptools<81"
+venv\Scripts\python -m pip install -r requirements.txt
 ```
 
 **`pg_config not found`**
