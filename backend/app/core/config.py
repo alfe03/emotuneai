@@ -1,0 +1,24 @@
+from pydantic_settings import BaseSettings
+
+class Settings(BaseSettings):
+    # App
+    APP_NAME: str = "MoodTune"
+    DEBUG: bool = True
+    SECRET_KEY: str = "change-this-in-production"
+
+    # Database
+    DATABASE_URL: str = "postgresql://postgres:password@localhost:5432/moodtune"
+
+    # Spotify API
+    # → https://developer.spotify.com/dashboard adresinden alınır
+    SPOTIFY_CLIENT_ID: str = ""
+    SPOTIFY_CLIENT_SECRET: str = ""
+
+    # JWT
+    JWT_ALGORITHM: str = "HS256"
+    ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 gün
+
+    class Config:
+        env_file = ".env"
+
+settings = Settings()
