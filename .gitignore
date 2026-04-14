@@ -20,3 +20,12 @@ Thumbs.db
 # Database / local runtime
 *.sqlite3
 *.db
+
+
+venv/
+__pycache__/
+*.pyc
+.env
+.deepface/
+*.h5
+*.pkl

@@ -2,7 +2,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     # App
-    APP_NAME: str = "MoodTune"
+    APP_NAME: str = "EmoTuneAI"
     DEBUG: bool = True
     SECRET_KEY: str = "change-this-in-production"
 

@@ -3,7 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth, mood, music, history
 
 app = FastAPI(
-    title="MoodTune API",
+    title="EmoTuneAI API",
     description="AI-powered mood-based music recommendation system",
     version="1.0.0"
 )
@@ -24,4 +24,4 @@ app.include_router(history.router, prefix="/api/history", tags=["History"])
 
 @app.get("/")
 def root():
-    return {"message": "MoodTune API is running 🎵"}
+    return {"message": "EmoTuneAI API is running 🎵"}
