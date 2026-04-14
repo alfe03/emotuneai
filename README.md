@@ -17,7 +17,7 @@ AI destekli duygu tabanlı müzik öneri sisteminin backend servisi.
 ### 1. Repoyu klonla
 
 ```bash
-git clone https://github.com/kullanici-adin/moodtune.git
+git clone https://github.com/kullanici-adin/emotuneai.git
 cd moodtune/backend
 ```
 
