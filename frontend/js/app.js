@@ -17,17 +17,12 @@ async function initApp() {
   setupCameraActions();
 
   if (api.isLoggedIn()) {
-    if (api.token === "demo-token") {
-      currentUser = { id: 1, email: "demo@emotune.com", username: "Demo" };
+    try {
+      currentUser = await api.getMe();
       showApp();
-    } else {
-      try {
-        currentUser = await api.getMe();
-        showApp();
-      } catch {
-        api.logout();
-        showAuth();
-      }
+    } catch {
+      api.logout();
+      showAuth();
     }
   } else {
     showAuth();
@@ -104,16 +99,9 @@ function setupAuthForms() {
     btn.innerHTML = '<span class="spinner"></span> Giriş yapılıyor...';
 
     try {
-      // Demo hesap kontrolü
-      if (email === "demo@emotune.com" && password === "demo123") {
-        api.setToken("demo-token");
-        currentUser = { id: 1, email: "demo@emotune.com", username: "Demo" };
-        showApp();
-      } else {
-        await api.login(email, password);
-        currentUser = await api.getMe();
-        showApp();
-      }
+      await api.login(email, password);
+      currentUser = await api.getMe();
+      showApp();
     } catch (err) {
       errEl.textContent = err.message;
     } finally {
