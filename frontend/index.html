@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="EmoTuneAI - Yapay zeka destekli duygu tabanlı müzik öneri sistemi. Ruh halinize göre müzik keşfedin.">
+  <title>EmoTuneAI – Duygu ile Müzik Keşfet</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='85'>🎵</text></svg>">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <!--  AUTH SCREEN                                                           -->
+  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <div id="auth-screen" class="auth-screen active">
+    <div class="auth-container">
+      <div class="auth-logo">
+        <h1>🎵 EmoTuneAI</h1>
+        <p>Ruh halinize göre müzik keşfedin</p>
+      </div>
+
+      <div class="auth-card">
+        <!-- Login Form -->
+        <form id="login-form" class="auth-form active">
+          <h2>Giriş Yap</h2>
+
+          <div class="form-group">
+            <label for="login-email">E-posta</label>
+            <input type="email" id="login-email" class="form-input" placeholder="ornek@email.com" required>
+          </div>
+
+          <div class="form-group">
+            <label for="login-password">Şifre</label>
+            <input type="password" id="login-password" class="form-input" placeholder="••••••••" required>
+          </div>
+
+          <p id="login-error" class="form-error"></p>
+          <button type="submit" class="btn btn-primary btn-full">Giriş Yap</button>
+
+          <p class="auth-switch">
+            Hesabınız yok mu? <a href="#" id="show-register">Kayıt Ol</a>
+          </p>
+        </form>
+
+        <!-- Register Form -->
+        <form id="register-form" class="auth-form">
+          <h2>Kayıt Ol</h2>
+
+          <div class="form-group">
+            <label for="reg-email">E-posta</label>
+            <input type="email" id="reg-email" class="form-input" placeholder="ornek@email.com" required>
+          </div>
+
+          <div class="form-group">
+            <label for="reg-name">Kullanıcı Adı</label>
+            <input type="text" id="reg-name" class="form-input" placeholder="Adınız" required>
+          </div>
+
+          <div class="form-group">
+            <label for="reg-password">Şifre</label>
+            <input type="password" id="reg-password" class="form-input" placeholder="En az 6 karakter" required minlength="6">
+          </div>
+
+          <p id="reg-error" class="form-error"></p>
+          <button type="submit" class="btn btn-primary btn-full">Kayıt Ol</button>
+
+          <p class="auth-switch">
+            Zaten hesabınız var mı? <a href="#" id="show-login">Giriş Yap</a>
+          </p>
+        </form>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <!--  APP SCREEN                                                            -->
+  <!-- ════════════════════════════════════════════════════════════════════════ -->
+  <div id="app-screen" class="app-screen">
+
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-logo">🎵 EmoTuneAI</div>
+
+      <nav class="sidebar-nav">
+        <button class="nav-item" data-nav="mood">
+          <span class="nav-icon">🎭</span> Ruh Hali
+        </button>
+        <button class="nav-item" data-nav="history">
+          <span class="nav-icon">📊</span> Geçmiş
+        </button>
+        <button class="nav-item" data-nav="liked">
+          <span class="nav-icon">💚</span> Beğenilenler
+        </button>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="user-info">
+          <div class="user-avatar">U</div>
+          <span class="user-name" id="user-greeting">Kullanıcı</span>
+        </div>
+        <button class="btn-logout" id="btn-logout">
+          <span>🚪</span> Çıkış Yap
+        </button>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content">
+
+      <!-- ── Mood Page ──────────────────────────────────────────────────── -->
+      <div id="page-mood" class="page">
+        <h1 class="page-title">Nasıl Hissediyorsunuz?</h1>
+        <p class="page-subtitle">Ruh halinizi analiz edin, size özel müzik önerileri alın.</p>
+
+        <!-- Mood analysis tabs -->
+        <div class="mood-tabs">
+          <button class="mood-tab active" data-mood-tab="text">
+            ✍️ Metin ile
+          </button>
+          <button class="mood-tab" data-mood-tab="face">
+            📷 Yüz ile
+          </button>
+          <button class="mood-tab" data-mood-tab="manual">
+            🎯 Manuel Seç
+          </button>
+        </div>
+
+        <!-- Text Panel -->
+        <div id="panel-text" class="mood-panel active">
+          <div class="text-area-wrapper">
+            <textarea
+              id="mood-text-input"
+              class="mood-textarea"
+              placeholder="Bugün nasıl hissediyorsunuz? Duygularınızı yazın...&#10;&#10;Örnek: Bugün çok enerjik ve mutlu hissediyorum!"
+              rows="5"
+            ></textarea>
+          </div>
+          <div class="text-submit">
+            <button class="btn btn-primary" id="btn-analyze-text">
+              ✨ Analiz Et
+            </button>
+          </div>
+        </div>
+
+        <!-- Face Panel -->
+        <div id="panel-face" class="mood-panel">
+          <div class="camera-area">
+            <div id="camera-placeholder" class="camera-placeholder active">
+              <span class="cam-icon">📸</span>
+              <p>Yüz ifadenizi analiz etmek için kamerayı başlatın</p>
+            </div>
+            <video id="camera-video" autoplay playsinline></video>
+          </div>
+          <div class="camera-controls">
+            <button class="btn btn-primary" id="btn-start-camera">
+              📷 Kamerayı Başlat
+            </button>
+            <button class="btn btn-primary" id="btn-capture" style="display:none">
+              🎯 Fotoğraf Çek & Analiz Et
+            </button>
+          </div>
+        </div>
+
+        <!-- Manual Panel -->
+        <div id="panel-manual" class="mood-panel">
+          <div class="mood-grid">
+            <button class="mood-card" data-mood="happy">
+              <span class="mood-emoji">😄</span>
+              <span class="mood-name">Mutlu</span>
+            </button>
+            <button class="mood-card" data-mood="sad">
+              <span class="mood-emoji">😢</span>
+              <span class="mood-name">Üzgün</span>
+            </button>
+            <button class="mood-card" data-mood="angry">
+              <span class="mood-emoji">😠</span>
+              <span class="mood-name">Kızgın</span>
+            </button>
+            <button class="mood-card" data-mood="neutral">
+              <span class="mood-emoji">😐</span>
+              <span class="mood-name">Nötr</span>
+            </button>
+            <button class="mood-card" data-mood="surprise">
+              <span class="mood-emoji">😮</span>
+              <span class="mood-name">Şaşkın</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Results -->
+        <div id="results-section" class="results-section"></div>
+      </div>
+
+      <!-- ── History Page ───────────────────────────────────────────────── -->
+      <div id="page-history" class="page">
+        <h1 class="page-title">Ruh Hali Geçmişi</h1>
+        <p class="page-subtitle">Önceki analizlerinizi ve mood değişimlerinizi görün.</p>
+        <div id="history-list" class="history-list"></div>
+      </div>
+
+      <!-- ── Liked Page ─────────────────────────────────────────────────── -->
+      <div id="page-liked" class="page">
+        <h1 class="page-title">Beğenilen Şarkılar</h1>
+        <p class="page-subtitle">Daha önce beğendiğiniz şarkılarınız.</p>
+        <div id="liked-list" class="tracks-grid"></div>
+      </div>
+
+    </main>
+  </div>
+
+  <!-- Toast Container -->
+  <div id="toast-container" class="toast-container"></div>
+
+  <!-- Scripts -->
+  <script src="js/api.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>

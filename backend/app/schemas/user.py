@@ -3,7 +3,7 @@ from pydantic import BaseModel, EmailStr
 class RegisterRequest(BaseModel):
     email: EmailStr
     password: str
-    name: str
+    username: str
 
 class LoginRequest(BaseModel):
     email: EmailStr
@@ -16,7 +16,7 @@ class TokenResponse(BaseModel):
 class UserResponse(BaseModel):
     id: int
     email: EmailStr
-    name: str
+    username: str
 
     class Config:
         from_attributes = True

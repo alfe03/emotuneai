@@ -18,7 +18,7 @@ services:
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: password
-      POSTGRES_DB: moodtune
+      POSTGRES_DB: emotune
     ports:
       - "5432:5432"
     volumes:

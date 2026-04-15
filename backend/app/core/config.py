@@ -7,7 +7,7 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-this-in-production"
 
     # Database
-    DATABASE_URL: str = "postgresql://postgres:password@localhost:5432/moodtune"
+    DATABASE_URL: str = "postgresql://postgres:password@localhost:5432/emotune"
 
     # Spotify API
     # → https://developer.spotify.com/dashboard adresinden alınır

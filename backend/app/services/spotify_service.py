@@ -62,10 +62,10 @@ def create_playlist(mood_category: str, user_id: str, track_ids: list) -> dict:
     Not: Bu fonksiyon için kullanıcı OAuth token'ı gerekir.
     """
     playlist_names = {
-        "energetic": "⚡ MoodTune – Energy Boost",
-        "calm":      "🌊 MoodTune – Calm Vibes",
-        "intense":   "🔥 MoodTune – Intense Mode",
-        "chill":     "😌 MoodTune – Chill Session",
+        "energetic": "⚡ EmoTune – Energy Boost",
+        "calm":      "🌊 EmoTune – Calm Vibes",
+        "intense":   "🔥 EmoTune – Intense Mode",
+        "chill":     "😌 EmoTune – Chill Session",
     }
 
     # TODO: Kullanıcı OAuth flow eklenecek
