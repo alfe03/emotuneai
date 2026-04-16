@@ -29,3 +29,7 @@ __pycache__/
 .deepface/
 *.h5
 *.pkl
+
+# Cache dosyaları (Spotify Token vb.)
+.cache
+**/.cache
