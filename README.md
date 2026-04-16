@@ -1,6 +1,7 @@
-# MoodTune – Backend
+# EmoTuneAI
 
-AI destekli duygu tabanlı müzik öneri sisteminin backend servisi.
+AI destekli yüz ve duygu analizine dayalı müzik öneri sistemi.
+Bu depo hem Backend'i (FastAPI & PostgreSQL) hem de Frontend'i (HTML, CSS, JS) içermektedir.
 
 ---
 
@@ -17,8 +18,8 @@ AI destekli duygu tabanlı müzik öneri sisteminin backend servisi.
 ### 1. Repoyu klonla
 
 ```bash
-git clone https://github.com/kullanici-adin/emotuneai.git
-cd moodtune/backend
+git clone https://github.com/alfe03/emotuneai.git
+cd emotuneai
 ```
 
 ### 2. Sanal ortam oluştur
@@ -79,14 +80,16 @@ Sonra tabloları oluştur:
 alembic upgrade head
 ```
 
-### 6. Sunucuyu başlat
+### 6. Uygulamayı Başlat
 
-```bash
-uvicorn main:app --reload
-```
+Proje içerisinde işinizi kolaylaştırmak için iki adet kısayol `.bat` dosyası bulunmaktadır:
 
-Sunucu `http://localhost:8000` adresinde çalışmaya başlar.
-API dokümantasyonu için: `http://localhost:8000/docs`
+1. **Backend İçin (`start.bat`)**: Çift tıklayarak PostgreSQL'i ve FastAPI backend'i başlatabilirsiniz. Sunucu `localhost:8000` üzerinde açılır ve tarayıcınızda otomatik olarak API dokümantasyonu (Swagger) belirir.
+2. **Frontend İçin (`start_frontend.bat`)**: Çift tıklayarak frontend arayüzü için yerel bir HTTP sunucusu başlatabilirsiniz. Çalıştığında `http://localhost:8080` üzerinden EmoTuneAI arayüzünü inceleyebilirsiniz.
+
+> **Manuel başlatmak isterseniz:**
+> Backend: `venv\Scripts\python -m uvicorn main:app --reload` (backend klasöründe)
+> Frontend: `venv\Scripts\python -m http.server 8080` (frontend klasöründe)
 
 ---
 
@@ -118,26 +121,18 @@ Bu komut hem API'yi hem de PostgreSQL'i otomatik olarak başlatır.
 ## Proje Yapısı
 
 ```
-backend/
-├── main.py                  # Uygulama giriş noktası
-├── requirements.txt
-├── .env.example
-├── Dockerfile
-├── docker-compose.yml
-└── app/
-    ├── core/
-    │   ├── config.py        # Ortam değişkenleri
-    │   └── database.py      # Veritabanı bağlantısı
-    ├── models/
-    │   └── models.py        # Veritabanı tabloları
-    ├── routers/
-    │   ├── auth.py
-    │   ├── mood.py
-    │   ├── music.py
-    │   └── history.py
-    └── services/
-        ├── mood_service.py      # DeepFace + HuggingFace
-        └── spotify_service.py   # Spotify API
+emotuneai/
+├── start.bat                # Backend'i başlatma scripti
+├── start_frontend.bat       # Frontend'i başlatma scripti
+├── backend/                 # FastAPI & PostgreSQL Backend Servisi
+│   ├── main.py
+│   ├── requirements.txt
+│   └── app/
+│       └── ...
+└── frontend/                # HTML, CSS, JS Saf Web Arayüzü
+    ├── index.html
+    ├── css/
+    └── js/
 ```
 
 ---
