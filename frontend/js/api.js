@@ -68,24 +68,24 @@ class EmoTuneAPI {
   }
 
   // ── Mood ─────────────────────────────────────────────────────────────────────
-  async analyzeFace(imageBase64) {
+  async analyzeFace(imageBase64, language = "mixed", contentType = "track", searchQuery = "", genre = "") {
     return this.request("/api/mood/analyze/face", {
       method: "POST",
-      body: JSON.stringify({ image_base64: imageBase64 }),
+      body: JSON.stringify({ image_base64: imageBase64, language, content_type: contentType, search_query: searchQuery, genre }),
     });
   }
 
-  async analyzeText(text) {
+  async analyzeText(text, language = "mixed", contentType = "track", searchQuery = "", genre = "") {
     return this.request("/api/mood/analyze/text", {
       method: "POST",
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, language, content_type: contentType, search_query: searchQuery, genre }),
     });
   }
 
-  async manualMood(mood) {
+  async manualMood(mood, language = "mixed", contentType = "track", searchQuery = "", genre = "") {
     return this.request("/api/mood/manual", {
       method: "POST",
-      body: JSON.stringify({ mood }),
+      body: JSON.stringify({ mood, language, content_type: contentType, search_query: searchQuery, genre }),
     });
   }
 

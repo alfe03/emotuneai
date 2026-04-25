@@ -8,6 +8,12 @@ document.addEventListener("DOMContentLoaded", () => {
 let currentUser = null;
 let currentResults = null;
 let cameraStream = null;
+let selectedLanguage = "mixed";       // "tr" | "en" | "mixed"
+let selectedContentType = "track";    // "track" | "playlist" | "podcast"
+let selectedGenre = "";               // "" (Tümü) | "pop" | "rap" | "rock" vs.
+let lastMoodCategory = null;          // Son analiz edilen mood (filtre değişince tekrar fetch için)
+let lastEmotion = null;
+let lastSearchQuery = "";             // Sonuçlar içinde arama yapmak için (örn: "Duman")
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 async function initApp() {
@@ -15,6 +21,7 @@ async function initApp() {
   setupAuthForms();
   setupMoodActions();
   setupCameraActions();
+  setupLanguageFilter();
 
   if (api.isLoggedIn()) {
     try {
@@ -157,16 +164,22 @@ function setupMoodActions() {
       showToast("Lütfen en az 3 karakter girin.", "warning");
       return;
     }
-    await performAnalysis(() => api.analyzeText(text));
+    await performAnalysis(() => api.analyzeText(text, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre));
   });
 
   // Manual mood
   document.querySelectorAll("[data-mood]").forEach((btn) => {
     btn.addEventListener("click", async () => {
       const mood = btn.dataset.mood;
-      await performAnalysis(() => api.manualMood(mood));
+      lastSearchQuery = ""; // Yeni mood seçildiğinde aramayı sıfırla
+      await performAnalysis(() => api.manualMood(mood, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre));
     });
   });
+}
+
+// ── Language Filter ──────────────────────────────────────────────────────────
+function setupLanguageFilter() {
+  // Bu fonksiyon artık boş — filtreler sonuç barında dinamik olarak oluşturuluyor
 }
 
 async function performAnalysis(analysisFn) {
@@ -181,6 +194,8 @@ async function performAnalysis(analysisFn) {
   try {
     const data = await analysisFn();
     currentResults = data;
+    lastMoodCategory = data.mood_category;
+    lastEmotion = data.emotion;
     renderResults(data);
   } catch (err) {
     resultsSection.innerHTML = `
@@ -191,24 +206,55 @@ async function performAnalysis(analysisFn) {
   }
 }
 
+// Filtre değiştiğinde sadece önerileri yeniden çek (mood badge'i koru)
+async function refetchRecommendations() {
+  if (!lastMoodCategory) return;
+
+  const contentArea = document.getElementById("results-content-area");
+  if (contentArea) {
+    contentArea.innerHTML = `
+      <div class="loading-state loading-small">
+        <div class="pulse-ring"></div>
+        <p>Öneriler yenileniyor...</p>
+      </div>`;
+  }
+
+  try {
+    const data = await api.manualMood(lastEmotion || lastMoodCategory, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre);
+    currentResults = data;
+    renderContentList(data.recommendations);
+  } catch (err) {
+    if (contentArea) {
+      contentArea.innerHTML = `
+        <div class="error-state">
+          <span class="error-icon">⚠️</span>
+          <p>${err.message}</p>
+        </div>`;
+    }
+  }
+}
+
 function renderResults(data) {
   const moodIcons = {
     energetic: "⚡",
     calm: "🌊",
     intense: "🔥",
     chill: "😌",
+    melancholic: "🌧️",
   };
   const moodLabels = {
     energetic: "Enerjik",
     calm: "Sakin",
     intense: "Yoğun",
     chill: "Rahat",
+    melancholic: "Hüzünlü",
   };
   const moodColors = {
     energetic: "var(--accent-energetic)",
     calm: "var(--accent-calm)",
     intense: "var(--accent-intense)",
     chill: "var(--accent-chill)",
+    melancholic: "var(--accent-melancholic)",
   };
 
   const resultsSection = document.getElementById("results-section");
@@ -216,28 +262,12 @@ function renderResults(data) {
   const label = moodLabels[data.mood_category] || data.mood_category;
   const color = moodColors[data.mood_category] || "var(--primary)";
 
-  let tracksHTML = "";
-  if (data.recommendations && data.recommendations.length > 0) {
-    tracksHTML = data.recommendations
-      .map(
-        (track, i) => `
-      <div class="track-card" style="animation-delay: ${i * 0.06}s">
-        <div class="track-image">
-          ${track.image_url ? `<img src="${track.image_url}" alt="${track.name}" loading="lazy">` : '<div class="track-placeholder">🎵</div>'}
-        </div>
-        <div class="track-info">
-          <h4 class="track-name">${track.name}</h4>
-          <p class="track-artist">${track.artist}</p>
-          <p class="track-album">${track.album}</p>
-        </div>
-        <div class="track-actions">
-          ${track.preview_url ? `<button class="btn-icon btn-play" onclick="playPreview('${track.preview_url}', this)" title="Önizle"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>` : ""}
-          <a href="${track.spotify_url}" target="_blank" class="btn-icon btn-spotify" title="Spotify'da aç"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg></a>
-        </div>
-      </div>`
-      )
-      .join("");
-  }
+  const contentTypeLabels = {
+    track: "🎵 Şarkılar",
+    playlist: "📋 Playlistler",
+    podcast: "🎙️ Podcastler",
+  };
+  const sectionTitle = contentTypeLabels[selectedContentType] || "🎵 Şarkılar";
 
   resultsSection.innerHTML = `
     <div class="results-header">
@@ -255,9 +285,140 @@ function renderResults(data) {
         </div>
       </div>
     </div>
-    <h3 class="section-title">🎵 Önerilen Şarkılar</h3>
-    <div class="tracks-grid">${tracksHTML}</div>
+
+    <div class="results-header-row">
+      <h3 class="section-title">${sectionTitle}</h3>
+      <button id="btn-refresh-results" class="btn-refresh" title="Yeni öneriler getir">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.59-9.27l-5.34 5.34"/>
+        </svg>
+        <span>Yenile</span>
+      </button>
+    </div>
+
+    <div class="results-filter-bar">
+      <div class="results-search-box">
+        <input type="text" id="results-search-input" class="form-input form-input-sm" placeholder="Sanatçı veya kelime ekle (örn: Duman)..." value="${lastSearchQuery}">
+        <button id="btn-results-search" class="btn btn-primary btn-sm">Ara</button>
+      </div>
+      <div class="filter-divider"></div>
+      <div class="filter-group">
+        <button class="filter-chip ${selectedContentType === 'track' ? 'active' : ''}" data-content="track">🎵 Şarkı</button>
+        <button class="filter-chip ${selectedContentType === 'playlist' ? 'active' : ''}" data-content="playlist">📋 Playlist</button>
+        <button class="filter-chip ${selectedContentType === 'podcast' ? 'active' : ''}" data-content="podcast">🎙️ Podcast</button>
+      </div>
+      <div class="filter-divider"></div>
+      <div class="filter-group">
+        <select id="results-genre-select" class="form-input form-input-sm" style="width: auto; height: 32px; padding-top: 0; padding-bottom: 0;">
+          <option value="">Tüm Türler</option>
+          <option value="pop" ${selectedGenre === 'pop' ? 'selected' : ''}>Pop</option>
+          <option value="rap" ${selectedGenre === 'rap' ? 'selected' : ''}>Rap / Hip-Hop</option>
+          <option value="rock" ${selectedGenre === 'rock' ? 'selected' : ''}>Rock</option>
+          <option value="indie" ${selectedGenre === 'indie' ? 'selected' : ''}>Indie</option>
+          <option value="electronic" ${selectedGenre === 'electronic' ? 'selected' : ''}>Elektronik</option>
+          <option value="classical" ${selectedGenre === 'classical' ? 'selected' : ''}>Klasik</option>
+        </select>
+      </div>
+      <div class="filter-divider"></div>
+      <div class="filter-group">
+        <button class="filter-chip ${selectedLanguage === 'tr' ? 'active' : ''}" data-lang="tr">🇹🇷 Türkçe</button>
+        <button class="filter-chip ${selectedLanguage === 'mixed' ? 'active' : ''}" data-lang="mixed">🌍 Karışık</button>
+        <button class="filter-chip ${selectedLanguage === 'en' ? 'active' : ''}" data-lang="en">🇺🇸 Yabancı</button>
+      </div>
+    </div>
+
+    <div id="results-content-area" class="tracks-grid"></div>
   `;
+
+  // Render content
+  renderContentList(data.recommendations);
+
+  // Refresh button listener
+  const refreshBtn = document.getElementById("btn-refresh-results");
+  if (refreshBtn) {
+    refreshBtn.addEventListener("click", () => {
+      refreshBtn.classList.add("spinning");
+      refetchRecommendations().finally(() => {
+        refreshBtn.classList.remove("spinning");
+      });
+    });
+  }
+
+  // Search event listeners
+  const resultsSearchInput = document.getElementById("results-search-input");
+  const btnResultsSearch = document.getElementById("btn-results-search");
+  
+  if(resultsSearchInput && btnResultsSearch) {
+    resultsSearchInput.addEventListener("keypress", (e) => {
+      if (e.key === "Enter") {
+        lastSearchQuery = resultsSearchInput.value.trim();
+        refetchRecommendations();
+      }
+    });
+    btnResultsSearch.addEventListener("click", () => {
+      lastSearchQuery = resultsSearchInput.value.trim();
+      refetchRecommendations();
+    });
+  }
+
+  // Genre event listener
+  const genreSelect = document.getElementById("results-genre-select");
+  if (genreSelect) {
+    genreSelect.addEventListener("change", (e) => {
+      selectedGenre = e.target.value;
+      refetchRecommendations();
+    });
+  }
+
+  // Filter event listeners
+  resultsSection.querySelectorAll("[data-content]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      resultsSection.querySelectorAll("[data-content]").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      selectedContentType = btn.dataset.content;
+      // Başlığı güncelle
+      const titleMap = { track: "🎵 Şarkılar", playlist: "📋 Playlistler", podcast: "🎙️ Podcastler" };
+      resultsSection.querySelector(".section-title").textContent = titleMap[selectedContentType] || "🎵 Şarkılar";
+      refetchRecommendations();
+    });
+  });
+
+  resultsSection.querySelectorAll("[data-lang]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      resultsSection.querySelectorAll("[data-lang]").forEach((b) => b.classList.remove("active"));
+      btn.classList.add("active");
+      selectedLanguage = btn.dataset.lang;
+      refetchRecommendations();
+    });
+  });
+}
+
+function renderContentList(items) {
+  const container = document.getElementById("results-content-area");
+  if (!items || items.length === 0) {
+    container.innerHTML = '<div class="empty-state"><span>🔍</span><p>Sonuç bulunamadı. Farklı bir filtre deneyin.</p></div>';
+    return;
+  }
+
+  container.innerHTML = items
+    .map(
+      (item, i) => `
+    <div class="track-card" style="animation-delay: ${i * 0.06}s">
+      <div class="track-image">
+        ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}" loading="lazy">` : `<div class="track-placeholder">${item.type === 'podcast' ? '🎙️' : item.type === 'playlist' ? '📋' : '🎵'}</div>`}
+      </div>
+      <div class="track-info">
+        <h4 class="track-name">${item.name}</h4>
+        <p class="track-artist">${item.artist}</p>
+        <p class="track-album">${item.album}</p>
+      </div>
+      <div class="track-actions">
+        ${item.preview_url ? `<button class="btn-icon btn-play" onclick="playPreview('${item.preview_url}', this)" title="Önizle"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>` : ""}
+        <a href="${item.spotify_url}" target="_blank" class="btn-icon btn-spotify" title="Spotify'da aç"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg></a>
+      </div>
+    </div>`
+    )
+    .join("");
 }
 
 // ── Audio Preview ────────────────────────────────────────────────────────────
@@ -336,7 +497,8 @@ async function captureAndAnalyze() {
   canvas.getContext("2d").drawImage(video, 0, 0);
   const base64 = canvas.toDataURL("image/jpeg").split(",")[1];
   stopCamera();
-  await performAnalysis(() => api.analyzeFace(base64));
+  lastSearchQuery = ""; // Kameradan yüz arandığında aramayı sıfırla
+  await performAnalysis(() => api.analyzeFace(base64, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre));
 }
 
 // ── History ──────────────────────────────────────────────────────────────────

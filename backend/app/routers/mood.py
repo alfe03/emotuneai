@@ -12,19 +12,31 @@ router = APIRouter()
 # ── Request / Response Modelleri ──────────────────────────────────────────────
 
 class FaceAnalysisRequest(BaseModel):
-    image_base64: str           # Frontend'den gelen base64 image
+    image_base64: str
+    language: str = "mixed"          # "tr" | "en" | "mixed"
+    content_type: str = "track"      # "track" | "playlist" | "podcast"
+    search_query: Optional[str] = ""
+    genre: Optional[str] = ""
 
 class TextAnalysisRequest(BaseModel):
-    text: str                   # Kullanıcının yazdığı duygu metni
+    text: str
+    language: str = "mixed"
+    content_type: str = "track"
+    search_query: Optional[str] = ""
+    genre: Optional[str] = ""
 
 class ManualMoodRequest(BaseModel):
-    mood: str                   # "happy" | "sad" | "angry" | "neutral" | "surprise"
+    mood: str                        # "happy" | "sad" | "angry" | "neutral" | "surprise"
+    language: str = "mixed"
+    content_type: str = "track"
+    search_query: Optional[str] = ""
+    genre: Optional[str] = ""
 
 class MoodResponse(BaseModel):
     emotion: str
     confidence: float
-    mood_category: str          # "energetic" | "calm" | "intense" | "chill"
-    recommendations: list       # Spotify şarkı listesi
+    mood_category: str
+    recommendations: list
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -34,7 +46,13 @@ async def analyze_face_endpoint(request: FaceAnalysisRequest):
     """Fotoğraftaki yüz ifadesini analiz eder ve müzik önerir."""
     try:
         mood_result = analyze_face(request.image_base64)
-        tracks = get_recommendations(mood_result["mood_category"])
+        tracks = get_recommendations(
+            mood_result["mood_category"],
+            language=request.language,
+            content_type=request.content_type,
+            search_query=request.search_query,
+            genre=request.genre
+        )
         return {**mood_result, "recommendations": tracks}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -47,7 +65,13 @@ async def analyze_text_endpoint(request: TextAnalysisRequest):
         raise HTTPException(status_code=400, detail="Lütfen daha uzun bir metin girin.")
     try:
         mood_result = analyze_text(request.text)
-        tracks = get_recommendations(mood_result["mood_category"])
+        tracks = get_recommendations(
+            mood_result["mood_category"],
+            language=request.language,
+            content_type=request.content_type,
+            search_query=request.search_query,
+            genre=request.genre
+        )
         return {**mood_result, "recommendations": tracks}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -58,7 +82,13 @@ async def manual_mood_endpoint(request: ManualMoodRequest):
     """Kullanıcının manuel seçtiği mood'a göre müzik önerir."""
     from app.services.mood_service import EMOTION_TO_MOOD
     mood_category = EMOTION_TO_MOOD.get(request.mood.lower(), "chill")
-    tracks = get_recommendations(mood_category)
+    tracks = get_recommendations(
+        mood_category,
+        language=request.language,
+        content_type=request.content_type,
+        search_query=request.search_query,
+        genre=request.genre
+    )
     return {
         "emotion": request.mood,
         "confidence": 100.0,

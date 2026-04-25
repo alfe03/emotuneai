@@ -38,8 +38,8 @@ EMOTION_TO_MOOD = {
     "happy":    "energetic",
     "surprise": "energetic",
     "neutral":  "chill",
-    "sad":      "calm",
-    "disgust":  "calm",
+    "sad":      "melancholic",
+    "disgust":  "melancholic",
     "fear":     "calm",
     "angry":    "intense",
 }
