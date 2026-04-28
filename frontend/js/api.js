@@ -12,9 +12,18 @@ class EmoTuneAPI {
     localStorage.setItem("emotune_token", token);
   }
 
+  setAvatar(url) {
+    localStorage.setItem("emotune_avatar", url);
+  }
+
+  getAvatar() {
+    return localStorage.getItem("emotune_avatar") || null;
+  }
+
   clearToken() {
     this.token = null;
     localStorage.removeItem("emotune_token");
+    localStorage.removeItem("emotune_avatar");
   }
 
   isLoggedIn() {

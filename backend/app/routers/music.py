@@ -28,7 +28,8 @@ def like_track(
         raise HTTPException(status_code=404, detail="Şarkı bulunamadı.")
     
     action_map = { "like": 1, "dislike": -1, "neutral": 0 }
-    track.is_liked = action_map.get(request.action, 0)
+    val = action_map.get(request.action, 0)
+    setattr(track, "is_liked", val)
     db.commit()
 
     return {"message": f"Şarkı {request.action} olarak işaretlendi."}

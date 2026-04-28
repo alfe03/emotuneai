@@ -392,6 +392,14 @@ body {
   font-size: 0.9rem;
   color: #fff;
   flex-shrink: 0;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}
+
+.user-avatar.has-image {
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.35);
 }
 
 .user-name {
@@ -692,7 +700,8 @@ body {
   font-family: inherit;
   font-size: 1rem;
   line-height: 1.6;
-  resize: vertical;
+  resize: none;
+  overflow: hidden;
   outline: none;
   transition: var(--transition);
 }
@@ -1217,4 +1226,90 @@ body {
   .auth-card {
     padding: 1.5rem;
   }
+}
+
+/* Spotify Elements & Dividers */
+.auth-divider {
+  display: flex;
+  align-items: center;
+  text-align: center;
+  margin: 1.5rem 0;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+.auth-divider::before, .auth-divider::after {
+  content: '';
+  flex: 1;
+  border-bottom: 1px solid var(--border);
+}
+.auth-divider span {
+  padding: 0 0.8rem;
+}
+.btn-spotify {
+  background: #1db954;
+  color: #fff;
+}
+.btn-spotify:hover {
+  background: #1ed760;
+  color: #fff;
+}
+
+.spotify-player-container {
+  position: fixed;
+  bottom: -200px;
+  left: calc(260px + 20px);
+  right: 20px;
+  height: 152px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+  transition: all 0.5s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  z-index: 100;
+  display: flex;
+  opacity: 0;
+  pointer-events: none;
+}
+.spotify-player-container.active {
+  bottom: 20px;
+  opacity: 1;
+  pointer-events: all;
+}
+@media (max-width: 768px) {
+  .spotify-player-container {
+    left: 10px;
+    right: 10px;
+    height: 152px;
+  }
+  .spotify-player-container.active {
+    bottom: 70px; /* Above mobile navbar */
+  }
+}
+.close-player-btn {
+  position: absolute;
+  top: -12px;
+  right: -12px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 50%;
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: var(--transition);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  z-index: 101;
+}
+.close-player-btn svg {
+  width: 16px;
+  height: 16px;
+}
+.close-player-btn:hover {
+  color: var(--text-primary);
+  background: var(--bg-elevated);
+  transform: scale(1.1);
 }

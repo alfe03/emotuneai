@@ -23,9 +23,35 @@ async function initApp() {
   setupCameraActions();
   setupLanguageFilter();
 
+  // Check URL for token (from Spotify OAuth redirect)
+  const urlParams = new URLSearchParams(window.location.search);
+  const tokenFromUrl = urlParams.get('token');
+  const errorFromUrl = urlParams.get('error');
+  const avatarFromUrl = urlParams.get('avatar');
+
+  if (errorFromUrl) {
+    setTimeout(() => {
+      showToast("Spotify girişi iptal edildi veya bir hata oluştu.", "error");
+    }, 500);
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
+  if (tokenFromUrl) {
+    api.setToken(tokenFromUrl);
+    if (avatarFromUrl) {
+      api.setAvatar(avatarFromUrl);
+    }
+    // Remove token from URL for cleaner history
+    window.history.replaceState({}, document.title, window.location.pathname);
+  }
+
   if (api.isLoggedIn()) {
     try {
       currentUser = await api.getMe();
+      const storedAvatar = api.getAvatar();
+      if (storedAvatar) {
+        setUserAvatar(storedAvatar);
+      }
       showApp();
     } catch {
       api.logout();
@@ -33,6 +59,19 @@ async function initApp() {
     }
   } else {
     showAuth();
+  }
+}
+
+function setUserAvatar(avatarUrl) {
+  const avatarEl = document.getElementById("user-avatar");
+  if (!avatarEl) return;
+  if (avatarUrl) {
+    avatarEl.style.backgroundImage = `url('${avatarUrl}')`;
+    avatarEl.classList.add("has-image");
+    avatarEl.textContent = "";
+  } else {
+    avatarEl.style.backgroundImage = "";
+    avatarEl.classList.remove("has-image");
   }
 }
 
@@ -76,6 +115,13 @@ function showApp() {
   document.getElementById("app-screen").classList.add("active");
   if (currentUser) {
     document.getElementById("user-greeting").textContent = currentUser.username || currentUser.email;
+    if (!api.getAvatar()) {
+      const initial = (currentUser.username || currentUser.email || "U").trim().charAt(0).toUpperCase();
+      const avatarEl = document.getElementById("user-avatar");
+      if (avatarEl) {
+        avatarEl.textContent = initial || "U";
+      }
+    }
   }
   switchPage("mood");
   document.querySelector('[data-nav="mood"]').classList.add("active");
@@ -93,6 +139,14 @@ function setupAuthForms() {
     document.getElementById("register-form").classList.remove("active");
     document.getElementById("login-form").classList.add("active");
   });
+
+  // Spotify Login redirects
+  const spotifyLoginFn = () => {
+    const redirect = encodeURIComponent(window.location.origin + "/index.html");
+    window.location.href = `http://127.0.0.1:8000/api/auth/spotify/login?redirect=${redirect}`;
+  };
+  const spotifyBtn = document.getElementById("btn-spotify-login");
+  if(spotifyBtn) spotifyBtn.addEventListener("click", spotifyLoginFn);
 
   // Login
   document.getElementById("login-form").addEventListener("submit", async (e) => {
@@ -158,6 +212,16 @@ function setupMoodActions() {
   });
 
   // Text analysis
+  const moodTextarea = document.getElementById("mood-text-input");
+  if (moodTextarea) {
+    const autoResize = () => {
+      moodTextarea.style.height = "auto";
+      moodTextarea.style.height = `${moodTextarea.scrollHeight}px`;
+    };
+    autoResize();
+    moodTextarea.addEventListener("input", autoResize);
+  }
+
   document.getElementById("btn-analyze-text").addEventListener("click", async () => {
     const text = document.getElementById("mood-text-input").value.trim();
     if (text.length < 3) {
@@ -414,7 +478,9 @@ function renderContentList(items) {
       </div>
       <div class="track-actions">
         ${item.preview_url ? `<button class="btn-icon btn-play" onclick="playPreview('${item.preview_url}', this)" title="Önizle"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>` : ""}
-        <a href="${item.spotify_url}" target="_blank" class="btn-icon btn-spotify" title="Spotify'da aç"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg></a>
+        <button class="btn-icon btn-spotify" onclick="playInSpotifyPlayer('${item.type}', '${item.id}')" title="Uygulama içinde oynat">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+        </button>
       </div>
     </div>`
     )
@@ -424,6 +490,41 @@ function renderContentList(items) {
 // ── Audio Preview ────────────────────────────────────────────────────────────
 let currentAudio = null;
 let currentPlayBtn = null;
+
+function playInSpotifyPlayer(type, id) {
+  const container = document.getElementById('spotify-player-container');
+  const iframe = document.getElementById('spotify-iframe');
+  
+  // type = 'track', 'playlist', 'show' (podcast)
+  let embedType = type;
+  if(type === 'podcast') embedType = 'show';
+  else if(type === 'playlist') embedType = 'playlist';
+  else embedType = 'track';
+
+  iframe.src = `https://open.spotify.com/embed/${embedType}/${id}?utm_source=generator&theme=0`;
+  container.classList.add('active');
+
+  // Mevcut çalan bir müzik önizlemesi varsa durdur.
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio = null;
+    if (currentPlayBtn) {
+      currentPlayBtn.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg>';
+      currentPlayBtn.classList.remove("playing");
+      currentPlayBtn = null;
+    }
+  }
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  const closeBtn = document.getElementById('close-player-btn');
+  if(closeBtn) {
+    closeBtn.addEventListener('click', () => {
+      document.getElementById('spotify-player-container').classList.remove('active');
+      document.getElementById('spotify-iframe').src = "";
+    });
+  }
+});
 
 function playPreview(url, btn) {
   // Stop existing
@@ -579,9 +680,9 @@ async function loadLikedTracks() {
           <p class="track-album">${t.album_name || ""}</p>
         </div>
         <div class="track-actions">
-          <a href="${t.spotify_url}" target="_blank" class="btn-icon btn-spotify" title="Spotify'da aç">
+          <button class="btn-icon btn-spotify" onclick="playInSpotifyPlayer('track', '${t.spotify_url.split('/').pop()}')" title="Uygulama içinde oynat">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-          </a>
+          </button>
         </div>
       </div>`
       )

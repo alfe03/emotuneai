@@ -50,8 +50,8 @@ async def analyze_face_endpoint(request: FaceAnalysisRequest):
             mood_result["mood_category"],
             language=request.language,
             content_type=request.content_type,
-            search_query=request.search_query,
-            genre=request.genre
+            search_query=request.search_query or "",
+            genre=request.genre or ""
         )
         return {**mood_result, "recommendations": tracks}
     except ValueError as e:
@@ -69,8 +69,8 @@ async def analyze_text_endpoint(request: TextAnalysisRequest):
             mood_result["mood_category"],
             language=request.language,
             content_type=request.content_type,
-            search_query=request.search_query,
-            genre=request.genre
+            search_query=request.search_query or "",
+            genre=request.genre or ""
         )
         return {**mood_result, "recommendations": tracks}
     except ValueError as e:
@@ -86,8 +86,8 @@ async def manual_mood_endpoint(request: ManualMoodRequest):
         mood_category,
         language=request.language,
         content_type=request.content_type,
-        search_query=request.search_query,
-        genre=request.genre
+            search_query=request.search_query or "",
+            genre=request.genre or ""
     )
     return {
         "emotion": request.mood,

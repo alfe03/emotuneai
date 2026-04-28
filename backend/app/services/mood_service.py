@@ -1,16 +1,28 @@
+import os
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+# Ağ hatalarına karşı proxy veya retry eklemek için (gerekirse)
+os.environ["CURL_CA_BUNDLE"] = ""
+
 from deepface import DeepFace
 from transformers import pipeline
-from deep_translator import GoogleTranslator  # ← YENİ
-from langdetect import detect                 # ← YENİ
-import numpy as np
-import cv2
-import base64
+from deep_translator import GoogleTranslator
+from langdetect import detect
+import logging
 
-sentiment_analyzer = pipeline(
-    "text-classification",
-    model="j-hartmann/emotion-english-distilroberta-base",
-    top_k=1
-)
+logging.getLogger("transformers").setLevel(logging.ERROR)
+
+try:
+    # Modelin internetten yüklenirken timeout olmasını engellemek veya cache'den okumasını sağlamak
+    sentiment_analyzer = pipeline(
+        "text-classification",
+        model="j-hartmann/emotion-english-distilroberta-base",
+        top_k=1,
+        model_kwargs={"local_files_only": False} # Önce internetten deneyecek, ağ kopsa bile cache'e bakacak
+    )
+except Exception as e:
+    print(f"Transformers pipeline yüklenirken hata oluştu: {e}")
+    # Fallback mekanizması veya hatayı loglama
+    sentiment_analyzer = None
 
 translator = GoogleTranslator(source="auto", target="en")  # ← YENİ
 
@@ -82,7 +94,17 @@ def analyze_text(text: str) -> dict:
     try:
         translated_text, detected_lang = translate_to_english(text)  # ← GÜNCELLENDİ
 
-        result = sentiment_analyzer(translated_text)[0][0]
+        if not sentiment_analyzer:
+            raise ValueError("Duygu analizi modeli yüklenemediği için metin analizi kullanılamıyor.")
+
+        analysis = sentiment_analyzer(translated_text)
+        if isinstance(analysis, list) and isinstance(analysis[0], list):
+            result = analysis[0][0]
+        elif isinstance(analysis, list) and isinstance(analysis[0], dict):
+            result = analysis[0]
+        else:
+            raise ValueError("Bilinmeyen analiz sonucu yapısı")
+        
         emotion = result["label"].lower()
         confidence = round(result["score"] * 100, 2)
         mood_category = EMOTION_TO_MOOD.get(emotion, "chill")

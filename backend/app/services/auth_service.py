@@ -29,7 +29,10 @@ def create_access_token(user_id: int) -> str:
 def decode_access_token(token: str) -> int | None:
     try:
         payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.JWT_ALGORITHM])
-        return int(payload.get("sub"))
+        sub = payload.get("sub")
+        if sub is None:
+            return None
+        return int(sub)
     except JWTError:
         return None
 
@@ -55,6 +58,6 @@ def create_user(db: Session, email: str, username: str, password: str) -> User:
 
 def authenticate_user(db: Session, email: str, password: str) -> User | None:
     user = get_user_by_email(db, email)
-    if not user or not verify_password(password, user.hashed_password):
+    if not user or not verify_password(password, str(user.hashed_password)):
         return None
     return user

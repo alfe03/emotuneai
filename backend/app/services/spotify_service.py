@@ -190,7 +190,7 @@ def _get_tracks(mood_category: str, lang: str, search_query: str, genre: str, li
             raise ValueError(f"Spotify öneri hatası: {str(e)}")
 
 
-def _search_tracks_direct(query: str, limit: int, market: str = None) -> list:
+def _search_tracks_direct(query: str, limit: int, market: str | None = None) -> list:
     search_kwargs = {"q": query, "type": "track", "limit": limit}
     if market:
         search_kwargs["market"] = market

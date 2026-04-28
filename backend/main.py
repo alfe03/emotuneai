@@ -1,6 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.routers import auth, mood, music, history
+from app.core.database import engine
+from app.models import models
+
+# Veritabanı tablolarını oluştur (Eğer alembic kullanılmıyorsa)
+models.Base.metadata.create_all(bind=engine)
 
 app = FastAPI(
     title="EmoTuneAI API",
@@ -16,6 +21,7 @@ app.add_middleware(
         "http://localhost:5500",
         "http://127.0.0.1:5500",
         "http://localhost:8080",
+        "http://127.0.0.1:8080",
         "null"
     ],
     allow_credentials=True,
