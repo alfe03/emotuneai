@@ -336,18 +336,13 @@ function renderResults(data) {
   resultsSection.innerHTML = `
     <div class="results-header">
       <div class="mood-badge" style="--mood-color: ${color}">
-        <span class="mood-icon">${icon}</span>
-        <div>
+        <span class="mood-icon">${data.emoji || icon}</span>
+        <div class="mood-text">
           <span class="mood-emotion">${data.emotion}</span>
-          <span class="mood-label">${label}</span>
-        </div>
-        <div class="mood-confidence">
-          <div class="confidence-bar">
-            <div class="confidence-fill" style="width: ${data.confidence}%; background: ${color}"></div>
-          </div>
-          <span>%${data.confidence.toFixed(1)}</span>
+          <span class="mood-category-tag" style="background: ${color}">${icon} ${label}</span>
         </div>
       </div>
+      ${data.explanation ? `<p class="mood-explanation">💬 ${data.explanation}</p>` : ""}
     </div>
 
     <div class="results-header-row">

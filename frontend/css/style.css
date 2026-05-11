@@ -834,55 +834,64 @@ body {
 .mood-badge {
   display: flex;
   align-items: center;
-  gap: 1rem;
-  padding: 1.2rem 1.6rem;
-  background: var(--bg-card);
+  gap: 1.2rem;
+  padding: 1.4rem 1.8rem;
+  background: linear-gradient(135deg, var(--bg-card), var(--bg-elevated));
   border: 1px solid var(--border);
   border-radius: var(--radius-lg);
   border-left: 4px solid var(--mood-color, var(--primary));
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  animation: fadeSlideUp 0.4s ease-out;
 }
 
 .mood-icon {
-  font-size: 2.5rem;
+  font-size: 3rem;
+  line-height: 1;
+  filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.3));
+}
+
+.mood-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
 }
 
 .mood-emotion {
   display: block;
-  font-size: 1.2rem;
+  font-size: 1.3rem;
   font-weight: 700;
-  text-transform: capitalize;
+  color: var(--text-primary);
+  line-height: 1.2;
 }
 
-.mood-label {
-  display: block;
-  font-size: 0.82rem;
-  color: var(--text-secondary);
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-}
-
-.mood-confidence {
-  margin-left: auto;
-  display: flex;
+.mood-category-tag {
+  display: inline-flex;
   align-items: center;
-  gap: 0.6rem;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
+  gap: 0.3rem;
+  width: fit-content;
+  padding: 0.25rem 0.7rem;
+  border-radius: 20px;
+  font-size: 0.72rem;
   font-weight: 600;
+  color: #fff;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
 }
 
-.confidence-bar {
-  width: 80px;
-  height: 6px;
-  background: var(--bg-elevated);
-  border-radius: 3px;
-  overflow: hidden;
-}
-
-.confidence-fill {
-  height: 100%;
-  border-radius: 3px;
-  transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+/* Gemini açıklama notu */
+.mood-explanation {
+  margin-top: 0.8rem;
+  padding: 0.8rem 1.2rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--mood-color, var(--primary));
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 0.88rem;
+  font-style: italic;
+  line-height: 1.5;
+  animation: fadeIn 0.5s ease-out;
 }
 
 .section-title {

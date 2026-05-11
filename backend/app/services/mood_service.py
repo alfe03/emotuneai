@@ -4,68 +4,124 @@ os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
 os.environ["CURL_CA_BUNDLE"] = ""
 
 from deepface import DeepFace
-from transformers import pipeline
-from deep_translator import GoogleTranslator
-from langdetect import detect
+import google.generativeai as genai
+from app.core.config import settings
+import json
 import logging
+import re
+import time
 
-logging.getLogger("transformers").setLevel(logging.ERROR)
-
-try:
-    # Modelin internetten yüklenirken timeout olmasını engellemek veya cache'den okumasını sağlamak
-    sentiment_analyzer = pipeline(
-        "text-classification",
-        model="j-hartmann/emotion-english-distilroberta-base",
-        top_k=1,
-        model_kwargs={"local_files_only": False} # Önce internetten deneyecek, ağ kopsa bile cache'e bakacak
-    )
-except Exception as e:
-    print(f"Transformers pipeline yüklenirken hata oluştu: {e}")
-    # Fallback mekanizması veya hatayı loglama
-    sentiment_analyzer = None
-
-translator = GoogleTranslator(source="auto", target="en")  # ← YENİ
+logging.getLogger("google.generativeai").setLevel(logging.ERROR)
+logger = logging.getLogger(__name__)
 
 
-def translate_to_english(text: str) -> tuple[str, str]:    # ← YENİ FONKSİYON
-    """
-    Metni İngilizce'ye çevirir.
-    Metin zaten İngilizceyse olduğu gibi döner.
-    """
-    try:
-        detected_lang = detect(text)
-        if detected_lang == "en":
-            return text, "en"
-        translated = translator.translate(text)
-        return translated, detected_lang
-    except Exception:
-        try:
-            translated = translator.translate(text)
-            return translated, "unknown"
-        except Exception:
-            return text, "unknown"
+# ── Gemini AI Kurulumu ────────────────────────────────────────────────────────
 
+genai.configure(api_key=settings.GEMINI_API_KEY)
+gemini_model = genai.GenerativeModel("gemini-2.0-flash")
+
+# Retry ayarları
+MAX_RETRIES = 3
+INITIAL_RETRY_DELAY = 5  # saniye
+
+
+# ── Sabitler ──────────────────────────────────────────────────────────────────
 
 EMOTION_TO_MOOD = {
-    "happy":    "energetic",
-    "surprise": "energetic",
-    "neutral":  "chill",
-    "sad":      "melancholic",
-    "disgust":  "melancholic",
-    "fear":     "calm",
-    "angry":    "intense",
+    "happy":     "energetic",
+    "happiness": "energetic",
+    "joy":       "energetic",
+    "surprise":  "energetic",
+    "neutral":   "chill",
+    "sad":       "melancholic",
+    "sadness":   "melancholic",
+    "disgust":   "melancholic",
+    "fear":      "calm",
+    "angry":     "intense",
+    "anger":     "intense",
+}
+
+# DeepFace duygu etiketleri → Türkçe açıklayıcı isimler + emoji
+EMOTION_DISPLAY = {
+    "happy":     {"label": "Mutlu ve neşeli",         "emoji": "😄"},
+    "happiness": {"label": "Mutlu ve neşeli",         "emoji": "😄"},
+    "joy":       {"label": "Neşeli ve keyifli",       "emoji": "😊"},
+    "surprise":  {"label": "Şaşkın ve heyecanlı",    "emoji": "😮"},
+    "neutral":   {"label": "Sakin ve dengeli",        "emoji": "😌"},
+    "sad":       {"label": "Üzgün ve hüzünlü",       "emoji": "😢"},
+    "sadness":   {"label": "Üzgün ve hüzünlü",       "emoji": "😢"},
+    "disgust":   {"label": "Rahatsız ve tedirgin",    "emoji": "😒"},
+    "fear":      {"label": "Endişeli ve kaygılı",     "emoji": "😰"},
+    "angry":     {"label": "Sinirli ve gergin",       "emoji": "😠"},
+    "anger":     {"label": "Sinirli ve gergin",       "emoji": "😠"},
 }
 
 MOOD_TO_FEATURES = {
-    "energetic": {"min_energy": 0.7, "min_valence": 0.6, "min_tempo": 120},
-    "calm":      {"max_energy": 0.4, "min_valence": 0.4, "max_tempo": 100},
-    "intense":   {"min_energy": 0.8, "max_valence": 0.4, "min_tempo": 130},
-    "chill":     {"min_energy": 0.3, "max_energy": 0.6, "min_valence": 0.5},
+    "energetic":   {"min_energy": 0.7, "min_valence": 0.6, "min_tempo": 120},
+    "calm":        {"max_energy": 0.4, "min_valence": 0.4, "max_tempo": 100},
+    "intense":     {"min_energy": 0.8, "max_valence": 0.4, "min_tempo": 130},
+    "chill":       {"min_energy": 0.3, "max_energy": 0.6, "min_valence": 0.5},
+    "melancholic": {"max_energy": 0.5, "max_valence": 0.3, "max_tempo": 100},
 }
 
+# Gemini'ye gönderilen sistem promptu
+GEMINI_MOOD_PROMPT = """Sen bir duygu analizi uzmanısın. Kullanıcının yazdığı metni analiz et ve ruh halini belirle.
+
+## Ruh Hali Kategorileri (mood_category)
+Aşağıdaki 5 kategoriden BİRİNİ seç:
+- "energetic" → Mutlu, enerjik, heyecanlı, neşeli, coşkulu, motive, eğlenceli, kendini iyi hisseden
+- "chill" → Rahat, huzurlu, keyifli, tatmin olmuş, dingin, gevşemiş, kafası rahat
+- "melancholic" → Üzgün, hüzünlü, nostaljik, duygusal, kırık, yalnız, özlem dolu, içi buruk
+- "intense" → Öfkeli, sinirli, agresif, gergin, isyankâr, patlayacak gibi, sıkılmış, bunalmış
+- "calm" → Sakinleşmek isteyen, endişeli, kaygılı, tedirgin, yorgun, stresli ama rahatlamaya ihtiyacı var
+
+## Duygu Etiketi (emotion)
+"emotion" alanında basit tek kelime YAZMA. Bunun yerine kullanıcının hissini en iyi özetleyen kısa ve samimi bir Türkçe ifade yaz.
+
+Örnekler:
+- "Mutlu ve enerjik" ✅  (sadece "mutlu" ❌)
+- "Nostaljik ve hüzünlü" ✅  (sadece "üzgün" ❌)
+- "Yorgun ama huzurlu" ✅  (sadece "sakin" ❌)
+- "Sinirli ve gergin" ✅  (sadece "kızgın" ❌)
+- "Heyecanlı ve meraklı" ✅
+- "Kafası rahat ve keyifli" ✅
+- "Özlem dolu" ✅
+- "Motive ve kararlı" ✅
+- "Bunalmış ve stresli" ✅
+- "İçi buruk ama umutlu" ✅
+- "Romantik ve duygusal" ✅
+- "Kaygılı ama umutlu" ✅
+- "Neşeli ve coşkulu" ✅
+
+## Emoji
+Duyguyu en iyi yansıtan tek bir emoji seç.
+
+## Kurallar
+1. Cümlenin genel anlamına, duygusal tonuna ve alt metnine odaklan.
+2. Karmaşık veya çelişkili duygular varsa (örn: "yoruldum ama mutluyum") ikisini de yansıt.
+3. Türkçe, İngilizce veya karışık dil kullanılabilir — hepsini anla.
+4. Sadece JSON formatında yanıt ver, başka hiçbir şey yazma.
+
+JSON formatı:
+{
+  "emotion": "kullanıcının hissini özetleyen kısa ve açıklayıcı Türkçe ifade (2-4 kelime)",
+  "emoji": "duyguyu yansıtan tek emoji",
+  "confidence": 0-100 arası güven skoru (sayı),
+  "mood_category": "energetic | chill | melancholic | intense | calm",
+  "explanation": "Neden bu kategoriyi seçtiğini kısa ve samimi bir şekilde açıkla (türkçe, 1-2 cümle, kullanıcıya hitap et)"
+}
+
+Kullanıcının metni: """
+
+
+# ── Yüz Analizi (DeepFace – değişmedi) ───────────────────────────────────────
 
 def analyze_face(image_base64: str) -> dict:
     try:
+        import base64
+        import numpy as np
+        import cv2
+
         img_bytes = base64.b64decode(image_base64)
         img_array = np.frombuffer(img_bytes, dtype=np.uint8)
         img = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
@@ -80,8 +136,12 @@ def analyze_face(image_base64: str) -> dict:
         confidence = result[0]["emotion"][dominant_emotion]
         mood_category = EMOTION_TO_MOOD.get(dominant_emotion, "chill")
 
+        # Türkçe açıklayıcı etiket ve emoji
+        display = EMOTION_DISPLAY.get(dominant_emotion, {"label": dominant_emotion, "emoji": "🎵"})
+
         return {
-            "emotion": dominant_emotion,
+            "emotion": display["label"],
+            "emoji": display["emoji"],
             "confidence": round(confidence, 2),
             "mood_category": mood_category,
             "all_emotions": result[0]["emotion"]
@@ -90,36 +150,311 @@ def analyze_face(image_base64: str) -> dict:
         raise ValueError(f"Yüz analizi başarısız: {str(e)}")
 
 
-def analyze_text(text: str) -> dict:
-    try:
-        translated_text, detected_lang = translate_to_english(text)  # ← GÜNCELLENDİ
+# ── Anahtar Kelime Tabanlı Yedek Analiz (Çoklu Duygu Desteği) ─────────────────
 
-        if not sentiment_analyzer:
-            raise ValueError("Duygu analizi modeli yüklenemediği için metin analizi kullanılamıyor.")
+KEYWORD_MOODS = {
+    "energetic": {
+        "keywords": [
+            "mutlu", "neşeli", "harika", "süper", "muhteşem", "enerjik",
+            "heyecanlı", "coşkulu", "motive", "eğlenceli", "iyi", "güzel",
+            "sevinçli", "keyifli", "happy", "excited", "great", "amazing",
+            "awesome", "wonderful", "fantastic", "love", "fun", "joy",
+        ],
+        "label": "Enerjik",
+        "emoji": "⚡",
+    },
+    "melancholic": {
+        "keywords": [
+            "üzgün", "hüzünlü", "kötü", "mutsuz", "ağla", "yalnız",
+            "özlem", "nostalji", "nostaljik", "kırık", "acı", "kayıp",
+            "sad", "depressed", "lonely", "miss", "cry", "unhappy",
+            "grief", "heartbroken", "melancholy", "sorrow", "lost",
+        ],
+        "label": "Hüzünlü",
+        "emoji": "😢",
+    },
+    "intense": {
+        "keywords": [
+            "sinir", "kızgın", "öfke", "nefret", "bıktım", "sıkıldım",
+            "gergin", "agresif", "patlayacak", "bunalmış", "çıldır",
+            "angry", "furious", "hate", "rage", "annoyed", "frustrated",
+            "mad", "irritated", "aggressive",
+        ],
+        "label": "Gergin",
+        "emoji": "😠",
+    },
+    "calm": {
+        "keywords": [
+            "endişe", "kaygı", "stres", "yorgun", "tedirgin", "korku",
+            "panik", "anxious", "stressed", "tired", "worried", "afraid",
+            "exhausted", "nervous", "overwhelmed", "sakinleş", "rahatla",
+        ],
+        "label": "Sakin",
+        "emoji": "😌",
+    },
+    "chill": {
+        "keywords": [
+            "rahat", "huzur", "dingin", "gevşe", "tatmin", "sakin",
+            "kafam rahat", "relax", "chill", "peaceful", "cool",
+            "content", "comfortable", "easy",
+        ],
+        "label": "Rahat",
+        "emoji": "😎",
+    },
+}
 
-        analysis = sentiment_analyzer(translated_text)
-        if isinstance(analysis, list) and isinstance(analysis[0], list):
-            result = analysis[0][0]
-        elif isinstance(analysis, list) and isinstance(analysis[0], dict):
-            result = analysis[0]
+# İstek/yönelim belirten kelimeler — kullanıcının ne istediğini anlamak için
+# "sakin şeyler istiyorum" → sakin'e ağırlık ver
+_DESIRE_WORDS = ["istiyorum", "isterim", "lazım", "ihtiyaç", "arıyorum", "dinle",
+                 "want", "need", "looking for", "give me", "i want", "dinlemek"]
+
+# Zıtlık/geçiş belirten kelimeler — "ama", "fakat" sonrasına ağırlık ver
+_CONTRAST_WORDS = ["ama", "fakat", "ancak", "yine de", "buna rağmen", "lakin",
+                   "but", "however", "although", "yet", "though"]
+
+# "biraz", "daha" gibi yoğunluk azaltıcılar
+_SOFTENER_WORDS = ["biraz", "birazcık", "hafif", "az", "azıcık", "daha",
+                   "slightly", "a bit", "a little", "somewhat", "kinda"]
+
+
+# Karma duygu açıklamaları — (birincil, ikincil) → Türkçe ifade + emoji
+_BLEND_MAP = {
+    ("energetic", "melancholic"): {"emotion": "Enerjik ama hüzünlü",           "emoji": "🥲"},
+    ("energetic", "calm"):        {"emotion": "Enerjik ama sakinleşmek istiyor","emoji": "🌅"},
+    ("energetic", "chill"):       {"emotion": "Neşeli ve rahat",               "emoji": "😊"},
+    ("energetic", "intense"):     {"emotion": "Coşkulu ve ateşli",             "emoji": "🔥"},
+    ("melancholic", "energetic"): {"emotion": "Hüzünlü ama umutlu",            "emoji": "🌧️"},
+    ("melancholic", "calm"):      {"emotion": "Hüzünlü ve yorgun",             "emoji": "😔"},
+    ("melancholic", "chill"):     {"emotion": "Duygusal ama dingin",            "emoji": "🌙"},
+    ("melancholic", "intense"):   {"emotion": "İçi buruk ve gergin",           "emoji": "💔"},
+    ("intense", "energetic"):     {"emotion": "Öfkeli ama enerjik",            "emoji": "💪"},
+    ("intense", "calm"):          {"emotion": "Gergin ama sakinleşmek istiyor", "emoji": "🌊"},
+    ("intense", "melancholic"):   {"emotion": "Sinirli ve kırgın",             "emoji": "😤"},
+    ("intense", "chill"):         {"emotion": "Sıkılmış, rahatlık arıyor",     "emoji": "😮‍💨"},
+    ("calm", "energetic"):        {"emotion": "Yorgun ama motive",             "emoji": "🌤️"},
+    ("calm", "melancholic"):      {"emotion": "Kaygılı ve duygusal",           "emoji": "😰"},
+    ("calm", "chill"):            {"emotion": "Yorgun ve dinlenmek istiyor",   "emoji": "😴"},
+    ("calm", "intense"):          {"emotion": "Stresli ve gergin",             "emoji": "😣"},
+    ("chill", "energetic"):       {"emotion": "Keyifli ve hafif enerjik",      "emoji": "🎶"},
+    ("chill", "melancholic"):     {"emotion": "Rahat ama biraz hüzünlü",      "emoji": "🍂"},
+    ("chill", "calm"):            {"emotion": "Huzurlu ve sakin",              "emoji": "🧘"},
+    ("chill", "intense"):         {"emotion": "Rahat ama biraz gergin",        "emoji": "🤔"},
+}
+
+# Birincil mood + istek ile ikincil mood arasında hangi Spotify mood'unun kullanılacağı
+# Kullanıcının asıl istediği yöne karar veriyoruz
+_BLEND_MOOD_RESOLUTION = {
+    ("energetic", "melancholic"): "chill",        # ortası: ne çok enerjik ne çok hüzünlü
+    ("energetic", "calm"):        "chill",        # enerjik ama sakin → chill
+    ("melancholic", "energetic"): "chill",        # üzgün ama umutlu → chill
+    ("melancholic", "calm"):      "melancholic",  # hüzünlü+yorgun → melancholic kalır
+    ("intense", "calm"):          "calm",         # gergin ama sakinleşmek istiyor → calm
+    ("intense", "melancholic"):   "melancholic",  # sinirli+kırgın → melancholic
+    ("calm", "energetic"):        "chill",        # yorgun ama motive → chill
+}
+
+
+def _fallback_analyze_text(text: str) -> dict:
+    """
+    Gemini API kullanılamadığında çoklu duygu algılayan akıllı fallback.
+    Karışık duyguları anlayıp harmanlanmış sonuç üretir.
+    """
+    text_lower = text.lower()
+
+    # ── 1) Her mood kategorisi için skor hesapla ──
+    scores = {}
+    for mood, data in KEYWORD_MOODS.items():
+        score = 0
+        for kw in data["keywords"]:
+            if kw in text_lower:
+                score += 1
+        scores[mood] = score
+
+    # ── 2) Zıtlık kelimelerini kontrol et ──
+    # "ama", "fakat" gibi kelimelerden SONRA gelen duyguya ekstra ağırlık ver
+    # çünkü kullanıcı genellikle "X ama Y istiyorum" der → Y'yi vurgular
+    has_contrast = False
+    contrast_pos = -1
+    for cw in _CONTRAST_WORDS:
+        pos = text_lower.find(cw)
+        if pos != -1:
+            has_contrast = True
+            contrast_pos = pos + len(cw)
+            break
+
+    if has_contrast and contrast_pos > 0:
+        after_contrast = text_lower[contrast_pos:]
+        for mood, data in KEYWORD_MOODS.items():
+            for kw in data["keywords"]:
+                if kw in after_contrast:
+                    scores[mood] += 2  # "ama" sonrası kelimeler 2x bonus
+
+    # ── 3) İstek kelimelerini kontrol et ──
+    # "sakin şeyler istiyorum" → sakin'e ağırlık
+    has_desire = any(dw in text_lower for dw in _DESIRE_WORDS)
+    if has_desire:
+        # İstek kelimesine yakın olan mood'a bonus
+        for dw in _DESIRE_WORDS:
+            dw_pos = text_lower.find(dw)
+            if dw_pos == -1:
+                continue
+            # İstek kelimesinden önceki 30 karaktere bak
+            before_desire = text_lower[max(0, dw_pos - 30):dw_pos]
+            for mood, data in KEYWORD_MOODS.items():
+                for kw in data["keywords"]:
+                    if kw in before_desire:
+                        scores[mood] += 3  # "sakin şeyler istiyorum" → sakin +3
+
+    # ── 4) Softener kontrolü ("biraz", "daha") ──
+    has_softener = any(sw in text_lower for sw in _SOFTENER_WORDS)
+
+    # ── 5) Birincil ve ikincil mood'u bul ──
+    sorted_moods = sorted(scores.items(), key=lambda x: x[1], reverse=True)
+    primary_mood = sorted_moods[0][0]
+    primary_score = sorted_moods[0][1]
+    secondary_mood = sorted_moods[1][0] if len(sorted_moods) > 1 else None
+    secondary_score = sorted_moods[1][1] if len(sorted_moods) > 1 else 0
+
+    # ── 6) Karışık duygu mu, tek duygu mu? ──
+    is_blended = (
+        secondary_score > 0
+        and primary_mood != secondary_mood
+        and (has_contrast or has_softener or secondary_score >= primary_score * 0.5)
+    )
+
+    if is_blended and secondary_mood:
+        # Harmanlanmış duygu
+        blend_key = (primary_mood, secondary_mood)
+        blend = _BLEND_MAP.get(blend_key, None)
+
+        if blend:
+            emotion = blend["emotion"]
+            emoji = blend["emoji"]
         else:
-            raise ValueError("Bilinmeyen analiz sonucu yapısı")
-        
-        emotion = result["label"].lower()
-        confidence = round(result["score"] * 100, 2)
-        mood_category = EMOTION_TO_MOOD.get(emotion, "chill")
+            # Map'te yoksa dinamik oluştur
+            p_label = KEYWORD_MOODS[primary_mood]["label"]
+            s_label = KEYWORD_MOODS[secondary_mood]["label"].lower()
+            emotion = f"{p_label} ama biraz {s_label}"
+            emoji = KEYWORD_MOODS[primary_mood]["emoji"]
 
-        return {
-            "emotion":           emotion,
-            "confidence":        confidence,
-            "mood_category":     mood_category,
-            "input_text":        text,            # ← YENİ: orijinal Türkçe metin
-            "translated_text":   translated_text, # ← YENİ: AI'a verilen İngilizce
-            "detected_language": detected_lang,   # ← YENİ: "tr", "en" ...
+        # Mood kategorisini belirle: harmanlanmış bir ortaya mı düşsün?
+        resolved_mood = _BLEND_MOOD_RESOLUTION.get(blend_key, None)
+        if resolved_mood:
+            mood_category = resolved_mood
+        elif has_contrast and secondary_score >= primary_score:
+            # "ama" sonrası daha baskınsa, ikincili seç
+            mood_category = secondary_mood
+        else:
+            mood_category = primary_mood
+
+        confidence = round(min((primary_score + secondary_score) * 15, 75), 2)
+        explanation = (
+            f"⚡ Karışık duygular algılandı: hem {KEYWORD_MOODS[primary_mood]['label'].lower()} "
+            f"hem {KEYWORD_MOODS[secondary_mood]['label'].lower()}. "
+            f"Sana en uygun ortayı bulmaya çalıştım!"
+        )
+    else:
+        # Tek duygu
+        chosen = KEYWORD_MOODS[primary_mood]
+        mood_category = primary_mood
+        confidence = round(min(primary_score * 20, 80), 2)
+
+        # Tek duygu için daha açıklayıcı emotion metni
+        _SINGLE_EMOTIONS = {
+            "energetic":   "Mutlu ve enerjik",
+            "melancholic": "Üzgün ve hüzünlü",
+            "intense":     "Sinirli ve gergin",
+            "calm":        "Yorgun ve sakinleşmek istiyor",
+            "chill":       "Rahat ve huzurlu",
         }
-    except Exception as e:
-        raise ValueError(f"Metin analizi başarısız: {str(e)}")
+        emotion = _SINGLE_EMOTIONS.get(primary_mood, chosen["label"])
+        emoji = chosen["emoji"]
+        explanation = "⚡ Gemini API şu an kullanılamadığı için basit analiz kullanıldı."
 
+    return {
+        "emotion":       emotion,
+        "emoji":         emoji,
+        "confidence":    confidence,
+        "mood_category": mood_category,
+        "input_text":    text,
+        "explanation":   explanation,
+    }
+
+
+# ── Metin Analizi (Gemini AI – Retry + Fallback) ─────────────────────────────
+
+def analyze_text(text: str) -> dict:
+    """
+    Kullanıcının yazdığı metni Gemini AI ile analiz eder.
+    429 hatasında üstel bekleme ile tekrar dener.
+    Tüm denemeler başarısız olursa anahtar kelime tabanlı fallback kullanır.
+    """
+    last_error = None
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            prompt = GEMINI_MOOD_PROMPT + f'"{text}"'
+
+            response = gemini_model.generate_content(prompt)
+            raw_response = response.text.strip()
+
+            # JSON bloğunu ayıkla (```json ... ``` veya düz JSON)
+            json_match = re.search(r'\{[\s\S]*?\}', raw_response)
+            if not json_match:
+                raise ValueError(f"Gemini'den geçerli JSON alınamadı: {raw_response[:200]}")
+
+            result = json.loads(json_match.group())
+
+            # Gerekli alanları doğrula
+            emotion = result.get("emotion", "belirsiz")
+            emoji = result.get("emoji", "🎵")
+            confidence = float(result.get("confidence", 50))
+            mood_category = result.get("mood_category", "chill")
+            explanation = result.get("explanation", "")
+
+            # Mood category doğrulaması
+            valid_moods = ["energetic", "chill", "melancholic", "intense", "calm"]
+            if mood_category not in valid_moods:
+                mood_category = "chill"
+
+            return {
+                "emotion":       emotion,
+                "emoji":         emoji,
+                "confidence":    round(confidence, 2),
+                "mood_category": mood_category,
+                "input_text":    text,
+                "explanation":   explanation,
+            }
+
+        except json.JSONDecodeError as e:
+            raise ValueError(f"Gemini yanıtı JSON olarak ayrıştırılamadı: {str(e)}")
+        except Exception as e:
+            last_error = e
+            error_str = str(e)
+
+            # 429 Rate Limit hatası mı kontrol et
+            if "429" in error_str or "quota" in error_str.lower() or "rate" in error_str.lower():
+                wait_time = INITIAL_RETRY_DELAY * (2 ** attempt)  # 5s, 10s, 20s
+                logger.warning(
+                    f"Gemini API kota hatası (deneme {attempt + 1}/{MAX_RETRIES}). "
+                    f"{wait_time} saniye bekleniyor..."
+                )
+                time.sleep(wait_time)
+                continue
+            else:
+                # 429 dışında bir hata → fallback'e düş
+                logger.error(f"Gemini API hatası: {error_str}")
+                break
+
+    # Tüm denemeler başarısız → fallback kullan
+    logger.warning(
+        f"Gemini API {MAX_RETRIES} denemeden sonra başarısız oldu. "
+        f"Fallback analiz kullanılıyor. Son hata: {last_error}"
+    )
+    return _fallback_analyze_text(text)
+
+
+# ── Mood → Spotify özellikleri ────────────────────────────────────────────────
 
 def get_mood_features(mood_category: str) -> dict:
     return MOOD_TO_FEATURES.get(mood_category, MOOD_TO_FEATURES["chill"])

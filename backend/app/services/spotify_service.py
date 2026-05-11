@@ -3,6 +3,9 @@ import spotipy
 from spotipy.oauth2 import SpotifyClientCredentials
 from app.core.config import settings
 import random
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Spotify client
 sp = spotipy.Spotify(
@@ -12,75 +15,114 @@ sp = spotipy.Spotify(
     )
 )
 
-# ── Mood → Arama sorguları (dil bazlı) ───────────────────────────────────────
+# ── Türk Sanatçı Havuzu (tür bazlı) ─────────────────────────────────────────
+# Spotify aramasında dil filtresi olmadığı için bilinen sanatçı isimleri kullanıyoruz
 
-MOOD_QUERIES = {
-    "tr": {
-        "energetic": [
-            "türkçe pop enerjik", "türkçe dans", "turkish party hits",
-            "türkçe hit şarkılar", "turkish pop workout", "türkçe neşeli"
-        ],
-        "calm": [
-            "türkçe slow", "türkçe hüzünlü", "turkish acoustic",
-            "türkçe sakin", "türkçe piyano", "turkish ballad"
-        ],
-        "intense": [
-            "türkçe rock", "turkish metal", "anadolu rock",
-            "türkçe rap agresif", "turkish hard rock", "türkçe punk"
-        ],
-        "chill": [
-            "türkçe indie", "türkçe chill", "turkish lofi",
-            "türkçe akustik", "türkçe cafe", "turkish jazz vocal"
-        ],
-        "melancholic": [
-            "türkçe hüzünlü", "türkçe damar", "turkish sad",
-            "türkçe ağlatan şarkılar", "türkçe duygusal", "turkish heartbreak"
-        ],
+TR_ARTISTS = {
+    "pop": [
+        "Tarkan", "Sezen Aksu", "Hadise", "Murat Boz", "Edis",
+        "Aleyna Tilki", "Gülşen", "Sıla", "Serdar Ortaç", "Bengü",
+        "İrem Derici", "Simge", "Demet Akalın", "Hande Yener", "Kenan Doğulu",
+        "Oğuzhan Koç", "Ebru Gündeş", "Mustafa Sandal", "Emre Aydın",
+    ],
+    "rap": [
+        "Ceza", "Sagopa Kajmer", "Şehinşah", "Ben Fero", "Ezhel",
+        "Contra", "Norm Ender", "Khontkar", "Massaka", "Joker",
+        "Patron", "Allame", "Sansar Salvo", "Hidra", "Defkhan",
+        "UZI", "Motive", "Reckol", "Heijan", "Lvbel C5",
+        "Blok3", "Muti", "Server Uraz",
+    ],
+    "rock": [
+        "Duman", "maNga", "Mor ve Ötesi", "Pinhani", "Adamlar",
+        "Teoman", "Şebnem Ferah", "Hayko Cepkin", "Gripin", "Kurban",
+        "Pentagram", "Athena", "Model", "Yüksek Sadakat", "Kolpa",
+        "Cem Adrian", "Can Gox",
+    ],
+    "indie": [
+        "Pinhani", "Adamlar", "Büyük Ev Ablukada", "Jakuzi",
+        "Yüzyüzeyken Konuşuruz", "TANTANA", "Tamino",
+        "Canozan", "Bulent Ortacgil", "Mabel Matiz", "No.1",
+    ],
+    "electronic": [
+        "Mahmut Orhan", "Ilkay Sencan", "Burak Yeter", "Oğuz Yılmaz",
+        "Velet", "DJ Snake", "Barış K",
+    ],
+    "classical": [
+        "Fazıl Say", "İdil Biret", "Cihat Aşkın", "Burçin Büke",
+    ],
+    "default": [
+        "Tarkan", "Sezen Aksu", "Duman", "Ceza", "Sıla", "Mabel Matiz",
+        "Mor ve Ötesi", "Adamlar", "Ezhel", "Hadise", "Pinhani",
+    ],
+}
+
+# ── Mood + Genre → Arama Sorguları ───────────────────────────────────────────
+
+MOOD_GENRE_QUERIES = {
+    "pop": {
+        "energetic":   ["pop party", "pop hits", "dans pop", "upbeat pop"],
+        "calm":        ["slow pop", "akustik pop", "soft pop", "ballad"],
+        "intense":     ["power pop", "pop rock", "güçlü pop"],
+        "chill":       ["chill pop", "easy pop", "pop akustik"],
+        "melancholic": ["slow şarkılar", "duygusal pop", "hüzünlü pop", "ayrılık"],
     },
-    "en": {
-        "energetic": [
-            "happy hits", "energy boost", "workout motivation",
-            "feel good pop", "dance party", "upbeat vibes"
-        ],
-        "calm": [
-            "calm acoustic", "peaceful piano", "relaxing ambient",
-            "soft classical", "gentle sleep", "meditation calm"
-        ],
-        "intense": [
-            "intense rock", "metal energy", "aggressive workout",
-            "hard rock anthems", "punk power", "rage metal"
-        ],
-        "chill": [
-            "chill vibes", "lofi chill", "indie chill",
-            "jazz coffee", "chill soul", "mellow evening"
-        ],
-        "melancholic": [
-            "sad songs", "heartbreak playlist", "crying in the rain",
-            "depressing songs", "melancholy vibes", "sad acoustic"
-        ],
+    "rap": {
+        "energetic":   ["rap hit", "hip hop", "rap beat", "türkçe rap"],
+        "calm":        ["chill rap", "lo-fi rap", "rap akustik"],
+        "intense":     ["aggressive rap", "hard rap", "rap diss", "gangsta rap"],
+        "chill":       ["chill hip hop", "rap chill", "boom bap"],
+        "melancholic": ["sad rap", "duygusal rap", "rap slow"],
     },
-    "mixed": {
-        "energetic": [
-            "happy hits", "türkçe pop enerjik", "global top hits",
-            "dance party", "türkçe dans", "feel good pop"
-        ],
-        "calm": [
-            "calm acoustic", "türkçe slow", "peaceful piano",
-            "türkçe sakin", "soft classical", "turkish ballad"
-        ],
-        "intense": [
-            "intense rock", "türkçe rock", "metal energy",
-            "anadolu rock", "hard rock anthems", "türkçe rap agresif"
-        ],
-        "chill": [
-            "chill vibes", "türkçe indie", "lofi chill",
-            "türkçe chill", "jazz coffee", "türkçe akustik"
-        ],
-        "melancholic": [
-            "sad songs", "türkçe hüzünlü", "heartbreak playlist",
-            "türkçe ağlatan şarkılar", "melancholy vibes", "türkçe damar"
-        ],
+    "rock": {
+        "energetic":   ["rock hit", "rock anthem", "rock enerjik"],
+        "calm":        ["soft rock", "akustik rock", "rock ballad"],
+        "intense":     ["hard rock", "metal", "punk rock", "heavy"],
+        "chill":       ["indie rock", "alternative rock", "rock chill"],
+        "melancholic": ["rock ballad", "grunge", "post rock", "rock hüzün"],
     },
+    "indie": {
+        "energetic":   ["indie pop", "indie dance", "indie upbeat"],
+        "calm":        ["indie akustik", "folk indie", "indie slow"],
+        "intense":     ["indie rock", "noise pop", "shoegaze"],
+        "chill":       ["indie chill", "dream pop", "indie folk"],
+        "melancholic": ["sad indie", "indie melancholy", "slowcore"],
+    },
+    "electronic": {
+        "energetic":   ["edm", "dance", "electro house", "trance"],
+        "calm":        ["ambient", "downtempo", "chillwave"],
+        "intense":     ["dubstep", "drum and bass", "hardstyle"],
+        "chill":       ["lo-fi", "chillhop", "deep house"],
+        "melancholic": ["synthwave sad", "dark electronic", "melancholic electronic"],
+    },
+    "classical": {
+        "energetic":   ["classical upbeat", "vivaldi", "classical energetic"],
+        "calm":        ["classical piano", "classical peaceful", "debussy"],
+        "intense":     ["classical dramatic", "wagner", "beethoven symphony"],
+        "chill":       ["classical relaxing", "classical guitar", "satie"],
+        "melancholic": ["classical sad", "chopin nocturne", "adagio"],
+    },
+}
+
+# Tür belirtilmemişse kullanılacak genel sorgular
+MOOD_DEFAULT_QUERIES = {
+    "energetic":   ["hit şarkılar", "party mix", "enerjik müzik", "dans"],
+    "calm":        ["sakin müzik", "slow şarkılar", "akustik", "huzur"],
+    "intense":     ["güçlü şarkılar", "rock metal", "agresif müzik"],
+    "chill":       ["chill mix", "rahat müzik", "lofi", "akşam keyfi"],
+    "melancholic": ["hüzünlü şarkılar", "duygusal", "ayrılık şarkıları", "ağlatan"],
+}
+
+# Dil bazlı ek sorgular
+LANG_PREFIXES = {
+    "tr": ["türkçe", "turkish"],
+    "en": ["english", ""],
+    "mixed": [""],
+}
+
+LANG_MARKET = {
+    "tr": "TR",
+    "en": "US",
+    "mixed": None,
 }
 
 # Podcast sorguları
@@ -108,12 +150,6 @@ MOOD_PODCAST_QUERIES = {
     },
 }
 
-LANG_MARKET = {
-    "tr": "TR",
-    "en": "US",
-    "mixed": None,
-}
-
 
 # ═════════════════════════════════════════════════════════════════════════════
 #  ANA FONKSİYON
@@ -123,10 +159,9 @@ def get_recommendations(mood_category: str, language: str = "mixed",
                         content_type: str = "track", search_query: str = "", genre: str = "", limit: int = 10) -> list:
     """
     Mood + dil + içerik türüne + (opsiyonel) arama kelimesine ve müzik türüne göre Spotify'dan öneriler getirir.
-    content_type: "track" | "playlist" | "podcast"
     """
     lang = language.lower() if language else "mixed"
-    if lang not in MOOD_QUERIES:
+    if lang not in LANG_MARKET:
         lang = "mixed"
 
     if content_type == "playlist":
@@ -137,82 +172,150 @@ def get_recommendations(mood_category: str, language: str = "mixed",
         return _get_tracks(mood_category, lang, search_query, genre, limit)
 
 
-# ── Şarkı önerileri ──────────────────────────────────────────────────────────
+# ── Şarkı önerileri (yeniden yazıldı) ────────────────────────────────────────
+
+def _build_track_query(mood_category: str, lang: str, search_query: str, genre: str) -> str:
+    """Akıllı arama sorgusu oluştur — genre öncelikli."""
+    parts = []
+
+    # 1) Kullanıcının arama kelimesi varsa öncelik ver
+    if search_query:
+        parts.append(search_query)
+
+    # 2) Genre + mood bazlı sorgu (GENRE İLK SIRADA)
+    genre_key = genre.lower() if genre else ""
+    if genre_key and genre_key in MOOD_GENRE_QUERIES:
+        mood_queries = MOOD_GENRE_QUERIES[genre_key].get(mood_category, MOOD_GENRE_QUERIES[genre_key].get("chill", [genre_key]))
+        parts.append(random.choice(mood_queries))
+    elif genre_key:
+        parts.append(genre_key)
+        default_mood = MOOD_DEFAULT_QUERIES.get(mood_category, ["müzik"])
+        parts.append(random.choice(default_mood))
+    else:
+        default_mood = MOOD_DEFAULT_QUERIES.get(mood_category, ["müzik"])
+        parts.append(random.choice(default_mood))
+
+    # 3) Dil bazlı prefix (EN SONA — genre'yi bozmamak için)
+    if lang == "tr" and not search_query:
+        parts.append("türkçe")
+
+    return " ".join(parts)
+
 
 def _get_tracks(mood_category: str, lang: str, search_query: str, genre: str, limit: int) -> list:
-    queries = MOOD_QUERIES.get(lang, MOOD_QUERIES["mixed"]).get(mood_category, ["mood"])
-    base_query = random.choice(queries)
-    
-    parts = [base_query]
-    if search_query: parts.append(search_query)
-    if genre: parts.append(genre)
-    query = " ".join(parts)
-
+    """Doğrudan track araması — daha isabetli sonuçlar."""
     market = LANG_MARKET.get(lang)
+    existing = []
 
-    try:
-        # Playlist'ten şarkı çek
-        search_kwargs = {"q": query, "type": "playlist", "limit": 5}
-        if market:
-            search_kwargs["market"] = market
-
-        playlist_results = sp.search(**search_kwargs)
-        playlists = playlist_results.get("playlists", {}).get("items", [])
-
-        if not playlists:
-            return _search_tracks_direct(query, limit, market)
-
-        playlist = random.choice(playlists)
-        playlist_tracks = sp.playlist_tracks(
-            playlist["id"],
-            fields="items(track(id,name,artists,album,preview_url,external_urls,duration_ms))",
-            limit=50,
-            market=market or "TR"
-        )
-
-        all_tracks = []
-        for item in playlist_tracks.get("items", []):
-            track = item.get("track")
-            if not track or not track.get("id"):
-                continue
-            all_tracks.append(_format_track(track))
-
-        if not all_tracks:
-            return _search_tracks_direct(query, limit, market)
-
-        random.shuffle(all_tracks)
-        return all_tracks[:limit]
-
-    except Exception as e:
+    # Strateji 1: Sanatçı bazlı arama (Türkçe seçildiyse)
+    if lang == "tr" and not search_query:
         try:
-            return _search_tracks_direct(query, limit, market)
-        except Exception:
-            raise ValueError(f"Spotify öneri hatası: {str(e)}")
+            tracks = _search_by_turkish_artists(mood_category, genre, limit, market)
+            existing.extend(tracks)
+            logger.info(f"Strateji 1 (sanatçı): {len(tracks)} şarkı bulundu")
+        except Exception as e:
+            logger.error(f"Strateji 1 hatası: {e}")
+
+    if len(existing) >= limit:
+        random.shuffle(existing)
+        return existing[:limit]
+
+    # Strateji 2: Akıllı sorgu ile track araması
+    try:
+        query = _build_track_query(mood_category, lang, search_query, genre)
+        logger.info(f"Strateji 2 sorgusu: '{query}'")
+        tracks = _search_tracks_direct(query, limit * 2, market)
+        logger.info(f"Strateji 2: {len(tracks)} şarkı bulundu")
+
+        seen_ids = {t["id"] for t in existing}
+        for t in tracks:
+            if t["id"] not in seen_ids:
+                existing.append(t)
+                seen_ids.add(t["id"])
+    except Exception as e:
+        logger.error(f"Strateji 2 hatası: {e}")
+
+    if len(existing) >= limit:
+        random.shuffle(existing)
+        return existing[:limit]
+
+    # Strateji 3: Son çare — basit genre/mood araması
+    fallback_queries = [
+        genre or mood_category,
+        f"{genre} music" if genre else f"{mood_category} music",
+        "top hits türkçe" if lang == "tr" else "top hits",
+    ]
+    for fq in fallback_queries:
+        if len(existing) >= limit:
+            break
+        try:
+            logger.info(f"Strateji 3 (son çare): '{fq}'")
+            tracks = _search_tracks_direct(fq, limit, market)
+            seen_ids = {t["id"] for t in existing}
+            for t in tracks:
+                if t["id"] not in seen_ids:
+                    existing.append(t)
+                    seen_ids.add(t["id"])
+        except Exception as e:
+            logger.error(f"Strateji 3 hatası: {e}")
+
+    random.shuffle(existing)
+    return existing[:limit]
+
+
+def _search_by_turkish_artists(mood_category: str, genre: str, limit: int, market: str | None) -> list:
+    """
+    Bilinen Türk sanatçılarını Spotify search API ile arar.
+    artist_top_tracks 403 verdiği için sadece search endpoint'i kullanılır.
+    """
+    genre_key = genre.lower() if genre else "default"
+    artist_pool = TR_ARTISTS.get(genre_key, TR_ARTISTS["default"])
+
+    # Rastgele 6 sanatçı seç
+    selected_artists = random.sample(artist_pool, min(6, len(artist_pool)))
+    all_tracks = []
+
+    for artist_name in selected_artists:
+        try:
+            # artist: filtresi ile sanatçının şarkılarını ara
+            query = f'artist:{artist_name}'
+            search_kwargs = {"q": query, "type": "track", "limit": 5}
+            if market:
+                search_kwargs["market"] = market
+
+            results = sp.search(**search_kwargs)
+            for track in results.get("tracks", {}).get("items", []):
+                if track and track.get("id"):
+                    all_tracks.append(_format_track(track))
+
+        except Exception as e:
+            logger.warning(f"Sanatçı araması başarısız '{artist_name}': {e}")
+            continue
+
+    random.shuffle(all_tracks)
+    return all_tracks
 
 
 def _search_tracks_direct(query: str, limit: int, market: str | None = None) -> list:
-    search_kwargs = {"q": query, "type": "track", "limit": limit}
+    search_kwargs = {"q": query, "type": "track", "limit": min(limit, 50)}
     if market:
         search_kwargs["market"] = market
-    results = sp.search(**search_kwargs)
-    tracks = []
-    for track in results.get("tracks", {}).get("items", []):
-        if track and track.get("id"):
-            tracks.append(_format_track(track))
-    return tracks
+    try:
+        results = sp.search(**search_kwargs)
+        tracks = []
+        for track in results.get("tracks", {}).get("items", []):
+            if track and track.get("id"):
+                tracks.append(_format_track(track))
+        return tracks
+    except Exception as e:
+        logger.error(f"Track araması başarısız (q='{query}'): {e}")
+        return []
 
 
 # ── Playlist önerileri ────────────────────────────────────────────────────────
 
 def _get_playlists(mood_category: str, lang: str, search_query: str, genre: str, limit: int) -> list:
-    queries = MOOD_QUERIES.get(lang, MOOD_QUERIES["mixed"]).get(mood_category, ["mood"])
-    base_query = random.choice(queries)
-    
-    parts = [base_query]
-    if search_query: parts.append(search_query)
-    if genre: parts.append(genre)
-    query = " ".join(parts)
-
+    query = _build_track_query(mood_category, lang, search_query, genre)
     market = LANG_MARKET.get(lang)
 
     try:
@@ -247,7 +350,7 @@ def _get_playlists(mood_category: str, lang: str, search_query: str, genre: str,
 def _get_podcasts(mood_category: str, lang: str, search_query: str, genre: str, limit: int) -> list:
     queries = MOOD_PODCAST_QUERIES.get(lang, MOOD_PODCAST_QUERIES["mixed"]).get(mood_category, ["podcast"])
     base_query = random.choice(queries)
-    
+
     parts = [base_query]
     if search_query: parts.append(search_query)
     if genre: parts.append(genre)
