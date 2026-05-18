@@ -53,13 +53,19 @@ cp .env.example .env
 `.env` dosyasını aç ve şu alanları doldur:
 
 ```env
-DATABASE_URL=postgresql://postgres:SIFREN@localhost:5432/moodtune
+DATABASE_URL=postgresql://postgres:sifren@localhost:5432/moodtune
 SPOTIFY_CLIENT_ID=spotify_client_id
 SPOTIFY_CLIENT_SECRET=spotify_client_secret
 SECRET_KEY=gizli-bir-key-yaz
+GEMINI_API_KEY=gemini_api_key
+FRONTEND_URL=http://127.0.0.1:8080/index.html
+SPOTIFY_REDIRECT_URI=http://127.0.0.1:8000/api/auth/spotify/callback
+CORS_ORIGINS=http://127.0.0.1:8080,http://localhost:8080
 ```
 
 > **Spotify API anahtarları:** https://developer.spotify.com/dashboard adresine gidip uygulama oluştur, oradan al.
+> **Gemini API Key:** https://ai.google.dev adresinden ücretsiz key oluştur.
+> **Production'da:** CORS_ORIGINS'deki localhost adreslerini kaldır, SPOTIFY_REDIRECT_URI'ni gerçek domain'e güncelle.
 
 ### 5. Veritabanını oluştur
 

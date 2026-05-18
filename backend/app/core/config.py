@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     # Frontend
     FRONTEND_URL: str = "http://127.0.0.1:8080/index.html"
 
+    # CORS Origins (virgülle ayrılmış)
+    CORS_ORIGINS: str = "http://127.0.0.1:8080,http://localhost:8080"
+
     # JWT
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24  # 1 gün
