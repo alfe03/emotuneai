@@ -1,4 +1,3 @@
-# Build compatibility: some legacy packages still import pkg_resources during build.
 setuptools<81
 
 # Web Framework
@@ -19,15 +18,25 @@ passlib[bcrypt]==1.7.4
 # AI - Yüz Analizi
 deepface==0.0.93
 opencv-python-headless==4.9.0.80
+tensorflow==2.16.1
 tf-keras==2.16.0
+numpy==1.26.4
 
 # AI - Metin Analizi (Gemini)
-google-generativeai
+google-generativeai==0.8.3
+
+# Protobuf (tensorflow + gemini ortak uyumlu versiyon)
+protobuf==4.25.8
 
 # Spotify
 spotipy==2.23.0
 
+# Çeviri
+deep-translator==1.11.4
+langdetect==1.0.9
+
 # Utils
 python-dotenv==1.0.1
 httpx==0.27.0
-
+pydantic[email]
+slowapi==0.1.9

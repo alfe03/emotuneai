@@ -5,8 +5,10 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta name="description" content="EmoTuneAI - Yapay zeka destekli duygu tabanlı müzik öneri sistemi. Ruh halinize göre müzik keşfedin.">
   <title>EmoTuneAI – Duygu ile Müzik Keşfet</title>
-  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='85'>🎵</text></svg>">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='85'>E</text></svg>">
   <link rel="stylesheet" href="css/style.css?v=7">
+  <!-- DOMPurify for XSS Protection -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.2/purify.min.js" integrity="sha512-RzIEX0BqEqqAofzR2XbBpsM+mZ7L2R6x/Ocd41gBEwLMFJ8g8x1lKItv9z4D2E555P9q/o89EeyuL3xO4a/ySA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
 
@@ -16,7 +18,7 @@
   <div id="auth-screen" class="auth-screen active">
     <div class="auth-container">
       <div class="auth-logo">
-        <h1>🎵 EmoTuneAI</h1>
+        <h1>EmoTuneAI</h1>
         <p>Ruh halinize göre müzik keşfedin</p>
       </div>
 
@@ -88,18 +90,30 @@
   <div id="app-screen" class="app-screen">
 
     <!-- Sidebar -->
-    <aside class="sidebar">
-      <div class="sidebar-logo">🎵 EmoTuneAI</div>
+    <aside id="sidebar" class="sidebar">
+      <div class="sidebar-header">
+        <div class="sidebar-logo">EmoTuneAI</div>
+        <button id="btn-toggle-sidebar" class="sidebar-toggle-btn" title="Menüyü Daralt/Genişlet">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <line x1="3" y1="12" x2="21" y2="12"></line>
+            <line x1="3" y1="6" x2="21" y2="6"></line>
+            <line x1="3" y1="18" x2="21" y2="18"></line>
+          </svg>
+        </button>
+      </div>
 
       <nav class="sidebar-nav">
         <button class="nav-item" data-nav="mood">
-          <span class="nav-icon">🎭</span> Ruh Hali
+          <span class="nav-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><path d="M8 14s1.5 2 4 2 4-2 4-2"></path><line x1="9" y1="9" x2="9.01" y2="9"></line><line x1="15" y1="9" x2="15.01" y2="9"></line></svg></span>
+          <span class="nav-text">Ruh Hali</span>
         </button>
         <button class="nav-item" data-nav="history">
-          <span class="nav-icon">📊</span> Geçmiş
+          <span class="nav-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg></span>
+          <span class="nav-text">Geçmiş</span>
         </button>
         <button class="nav-item" data-nav="liked">
-          <span class="nav-icon">💚</span> Beğenilenler
+          <span class="nav-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></span>
+          <span class="nav-text">Beğenilenler</span>
         </button>
       </nav>
 
@@ -109,7 +123,8 @@
           <span class="user-name" id="user-greeting">Kullanıcı</span>
         </div>
         <button class="btn-logout" id="btn-logout">
-          <span>🚪</span> Çıkış Yap
+          <span class="nav-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></span>
+          <span class="nav-text">Çıkış Yap</span>
         </button>
       </div>
     </aside>
@@ -125,13 +140,13 @@
         <!-- Mood analysis tabs -->
         <div class="mood-tabs">
           <button class="mood-tab active" data-mood-tab="text">
-            ✍️ Metin ile
+            Metin ile
           </button>
           <button class="mood-tab" data-mood-tab="face">
-            📷 Yüz ile
+            Yüz ile
           </button>
           <button class="mood-tab" data-mood-tab="manual">
-            🎯 Manuel Seç
+            Manuel Seç
           </button>
         </div>
 
@@ -147,7 +162,7 @@
           </div>
           <div class="text-submit">
             <button class="btn btn-primary" id="btn-analyze-text">
-              ✨ Analiz Et
+              Analiz Et
             </button>
           </div>
         </div>
@@ -156,17 +171,18 @@
         <div id="panel-face" class="mood-panel">
           <div class="camera-area">
             <div id="camera-placeholder" class="camera-placeholder active">
-              <span class="cam-icon">📸</span>
+              <span class="cam-icon"></span>
               <p>Yüz ifadenizi analiz etmek için kamerayı başlatın</p>
             </div>
             <video id="camera-video" autoplay playsinline></video>
+            <div class="scan-overlay"></div>
           </div>
           <div class="camera-controls">
             <button class="btn btn-primary" id="btn-start-camera">
-              📷 Kamerayı Başlat
+              Kamerayı Başlat
             </button>
             <button class="btn btn-primary" id="btn-capture" style="display:none">
-              🎯 Fotoğraf Çek & Analiz Et
+              Fotoğraf Çek & Analiz Et
             </button>
           </div>
         </div>

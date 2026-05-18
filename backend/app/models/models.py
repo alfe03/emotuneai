@@ -47,3 +47,19 @@ class RecommendedTrack(Base):
     created_at     = Column(DateTime(timezone=True), server_default=func.now())
 
     mood_entry = relationship("MoodHistory", back_populates="tracks")
+
+
+class LikedTrack(Base):
+    __tablename__ = "liked_tracks"
+
+    id             = Column(Integer, primary_key=True, index=True)
+    user_id        = Column(Integer, ForeignKey("users.id"), nullable=False)
+    spotify_id     = Column(String, nullable=False)
+    track_name     = Column(String, nullable=False)
+    artist_name    = Column(String, nullable=False)
+    album_name     = Column(String, nullable=True)
+    image_url      = Column(String, nullable=True)
+    spotify_url    = Column(String, nullable=True)
+    created_at     = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", backref="liked_tracks")

@@ -3,15 +3,18 @@ from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-from app.models.models import User, RecommendedTrack
+from app.models.models import User, RecommendedTrack, LikedTrack
 
 router = APIRouter()
 
-
 class LikeRequest(BaseModel):
-    track_id: int
-    action: str    # "like" | "dislike" | "neutral"
-
+    spotify_id: str
+    track_name: str
+    artist_name: str
+    album_name: str = ""
+    image_url: str = ""
+    spotify_url: str = ""
+    action: str    # "like" | "dislike"
 
 @router.post("/like")
 def like_track(
@@ -19,21 +22,34 @@ def like_track(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Şarkıyı beğen / beğenme / nötr olarak işaretle."""
-    track = db.query(RecommendedTrack).filter(
-        RecommendedTrack.id == request.track_id
+    """Şarkıyı beğen veya favorilerden çıkar."""
+    existing_like = db.query(LikedTrack).filter(
+        LikedTrack.user_id == current_user.id,
+        LikedTrack.spotify_id == request.spotify_id
     ).first()
 
-    if not track:
-        raise HTTPException(status_code=404, detail="Şarkı bulunamadı.")
-    
-    action_map = { "like": 1, "dislike": -1, "neutral": 0 }
-    val = action_map.get(request.action, 0)
-    setattr(track, "is_liked", val)
-    db.commit()
-
-    return {"message": f"Şarkı {request.action} olarak işaretlendi."}
-
+    if request.action == "like":
+        if not existing_like:
+            new_like = LikedTrack(
+                user_id=current_user.id,
+                spotify_id=request.spotify_id,
+                track_name=request.track_name,
+                artist_name=request.artist_name,
+                album_name=request.album_name,
+                image_url=request.image_url,
+                spotify_url=request.spotify_url
+            )
+            db.add(new_like)
+            db.commit()
+            return {"message": "Şarkı beğenilenlere eklendi."}
+        return {"message": "Şarkı zaten beğenilmiş."}
+        
+    elif request.action == "dislike":
+        if existing_like:
+            db.delete(existing_like)
+            db.commit()
+            return {"message": "Şarkı beğenilenlerden çıkarıldı."}
+        return {"message": "Şarkı zaten favorilerde yok."}
 
 @router.get("/liked")
 def get_liked_tracks(
@@ -42,18 +58,15 @@ def get_liked_tracks(
 ):
     """Kullanıcının beğendiği şarkıları getirir."""
     tracks = (
-        db.query(RecommendedTrack)
-        .join(RecommendedTrack.mood_entry)
-        .filter(
-            RecommendedTrack.is_liked == 1,
-        )
-        .order_by(RecommendedTrack.created_at.desc())
+        db.query(LikedTrack)
+        .filter(LikedTrack.user_id == current_user.id)
+        .order_by(LikedTrack.created_at.desc())
         .all()
     )
 
     return [
         {
-            "id": t.id,
+            "id": t.spotify_id,
             "track_name": t.track_name,
             "artist_name": t.artist_name,
             "album_name": t.album_name,

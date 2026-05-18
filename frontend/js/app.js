@@ -87,14 +87,31 @@ function setupNavigation() {
     });
   });
 
+  // Sidebar toggle
+  const toggleBtn = document.getElementById("btn-toggle-sidebar");
+  if (toggleBtn) {
+    toggleBtn.addEventListener("click", () => {
+      document.getElementById("sidebar").classList.toggle("collapsed");
+      const isCollapsed = document.getElementById("sidebar").classList.contains("collapsed");
+      localStorage.setItem("sidebarCollapsed", isCollapsed);
+    });
+    
+    // Yükleme sırasında localStorage kontrolü
+    if (localStorage.getItem("sidebarCollapsed") === "true") {
+      document.getElementById("sidebar").classList.add("collapsed");
+    }
+  }
+
   document.getElementById("btn-logout").addEventListener("click", () => {
     api.logout();
     currentUser = null;
+    localStorage.removeItem("lastPage");
     showAuth();
   });
 }
 
 function switchPage(page) {
+  localStorage.setItem("lastPage", page);
   document.querySelectorAll(".page").forEach((p) => p.classList.remove("active"));
   const el = document.getElementById(`page-${page}`);
   if (el) {
@@ -123,8 +140,13 @@ function showApp() {
       }
     }
   }
-  switchPage("mood");
-  document.querySelector('[data-nav="mood"]').classList.add("active");
+  const lastPage = localStorage.getItem("lastPage") || "mood";
+  switchPage(lastPage);
+  document.querySelectorAll("[data-nav]").forEach((b) => b.classList.remove("active"));
+  const activeNav = document.querySelector(`[data-nav="${lastPage}"]`);
+  if (activeNav) {
+    activeNav.classList.add("active");
+  }
 }
 
 function setupAuthForms() {
@@ -249,9 +271,16 @@ function setupLanguageFilter() {
 async function performAnalysis(analysisFn) {
   const resultsSection = document.getElementById("results-section");
   resultsSection.innerHTML = `
-    <div class="loading-state">
-      <div class="pulse-ring"></div>
-      <p>Ruh haliniz analiz ediliyor...</p>
+    <div class="tracks-grid">
+      ${Array(5).fill(`
+        <div class="track-card">
+          <div class="skeleton-image skeleton"></div>
+          <div class="track-info">
+            <div class="skeleton-text skeleton"></div>
+            <div class="skeleton-text short skeleton"></div>
+          </div>
+        </div>
+      `).join('')}
     </div>`;
   resultsSection.classList.add("active");
 
@@ -277,9 +306,16 @@ async function refetchRecommendations() {
   const contentArea = document.getElementById("results-content-area");
   if (contentArea) {
     contentArea.innerHTML = `
-      <div class="loading-state loading-small">
-        <div class="pulse-ring"></div>
-        <p>Öneriler yenileniyor...</p>
+      <div class="tracks-grid">
+        ${Array(5).fill(`
+          <div class="track-card">
+            <div class="skeleton-image skeleton"></div>
+            <div class="track-info">
+              <div class="skeleton-text skeleton"></div>
+              <div class="skeleton-text short skeleton"></div>
+            </div>
+          </div>
+        `).join('')}
       </div>`;
   }
 
@@ -291,7 +327,7 @@ async function refetchRecommendations() {
     if (contentArea) {
       contentArea.innerHTML = `
         <div class="error-state">
-          <span class="error-icon">⚠️</span>
+          <span class="error-icon"></span>
           <p>${err.message}</p>
         </div>`;
     }
@@ -300,11 +336,11 @@ async function refetchRecommendations() {
 
 function renderResults(data) {
   const moodIcons = {
-    energetic: "⚡",
-    calm: "🌊",
-    intense: "🔥",
-    chill: "😌",
-    melancholic: "🌧️",
+    energetic: "",
+    calm: "",
+    intense: "",
+    chill: "",
+    melancholic: "",
   };
   const moodLabels = {
     energetic: "Enerjik",
@@ -322,27 +358,26 @@ function renderResults(data) {
   };
 
   const resultsSection = document.getElementById("results-section");
-  const icon = moodIcons[data.mood_category] || "🎵";
+  const icon = "";
   const label = moodLabels[data.mood_category] || data.mood_category;
   const color = moodColors[data.mood_category] || "var(--primary)";
 
   const contentTypeLabels = {
-    track: "🎵 Şarkılar",
-    playlist: "📋 Playlistler",
-    podcast: "🎙️ Podcastler",
+    track: "Şarkılar",
+    playlist: "Playlistler",
+    podcast: "Podcastler",
   };
-  const sectionTitle = contentTypeLabels[selectedContentType] || "🎵 Şarkılar";
+  const sectionTitle = contentTypeLabels[selectedContentType] || "Şarkılar";
 
   resultsSection.innerHTML = `
     <div class="results-header">
       <div class="mood-badge" style="--mood-color: ${color}">
-        <span class="mood-icon">${data.emoji || icon}</span>
         <div class="mood-text">
           <span class="mood-emotion">${data.emotion}</span>
-          <span class="mood-category-tag" style="background: ${color}">${icon} ${label}</span>
+          <span class="mood-category-tag" style="background: ${color}">${label}</span>
         </div>
       </div>
-      ${data.explanation ? `<p class="mood-explanation">💬 ${data.explanation}</p>` : ""}
+      ${data.explanation ? `<p class="mood-explanation">${data.explanation}</p>` : ""}
     </div>
 
     <div class="results-header-row">
@@ -362,9 +397,9 @@ function renderResults(data) {
       </div>
       <div class="filter-divider"></div>
       <div class="filter-group">
-        <button class="filter-chip ${selectedContentType === 'track' ? 'active' : ''}" data-content="track">🎵 Şarkı</button>
-        <button class="filter-chip ${selectedContentType === 'playlist' ? 'active' : ''}" data-content="playlist">📋 Playlist</button>
-        <button class="filter-chip ${selectedContentType === 'podcast' ? 'active' : ''}" data-content="podcast">🎙️ Podcast</button>
+        <button class="filter-chip ${selectedContentType === 'track' ? 'active' : ''}" data-content="track">Şarkı</button>
+        <button class="filter-chip ${selectedContentType === 'playlist' ? 'active' : ''}" data-content="playlist">Playlist</button>
+        <button class="filter-chip ${selectedContentType === 'podcast' ? 'active' : ''}" data-content="podcast">Podcast</button>
       </div>
       <div class="filter-divider"></div>
       <div class="filter-group">
@@ -380,9 +415,9 @@ function renderResults(data) {
       </div>
       <div class="filter-divider"></div>
       <div class="filter-group">
-        <button class="filter-chip ${selectedLanguage === 'tr' ? 'active' : ''}" data-lang="tr">🇹🇷 Türkçe</button>
-        <button class="filter-chip ${selectedLanguage === 'mixed' ? 'active' : ''}" data-lang="mixed">🌍 Karışık</button>
-        <button class="filter-chip ${selectedLanguage === 'en' ? 'active' : ''}" data-lang="en">🇺🇸 Yabancı</button>
+        <button class="filter-chip ${selectedLanguage === 'tr' ? 'active' : ''}" data-lang="tr">Türkçe</button>
+        <button class="filter-chip ${selectedLanguage === 'mixed' ? 'active' : ''}" data-lang="mixed">Karışık</button>
+        <button class="filter-chip ${selectedLanguage === 'en' ? 'active' : ''}" data-lang="en">Yabancı</button>
       </div>
     </div>
 
@@ -436,8 +471,8 @@ function renderResults(data) {
       btn.classList.add("active");
       selectedContentType = btn.dataset.content;
       // Başlığı güncelle
-      const titleMap = { track: "🎵 Şarkılar", playlist: "📋 Playlistler", podcast: "🎙️ Podcastler" };
-      resultsSection.querySelector(".section-title").textContent = titleMap[selectedContentType] || "🎵 Şarkılar";
+      const titleMap = { track: "Şarkılar", playlist: "Playlistler", podcast: "Podcastler" };
+      resultsSection.querySelector(".section-title").textContent = titleMap[selectedContentType] || "Şarkılar";
       refetchRecommendations();
     });
   });
@@ -455,31 +490,87 @@ function renderResults(data) {
 function renderContentList(items) {
   const container = document.getElementById("results-content-area");
   if (!items || items.length === 0) {
-    container.innerHTML = '<div class="empty-state"><span>🔍</span><p>Sonuç bulunamadı. Farklı bir filtre deneyin.</p></div>';
+    container.innerHTML = `
+      <div class="empty-state">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5; margin-bottom: 1rem;"><circle cx="11" cy="11" r="8"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <p>Sonuç bulunamadı. Farklı bir filtre deneyin.</p>
+      </div>`;
     return;
   }
 
+  // Define liked memory client-side if needed, but we can just toggle heart
   container.innerHTML = items
     .map(
-      (item, i) => `
+      (item, i) => {
+        // Prepare object string safely to bind in HTML
+        const trackObj = {
+          spotify_id: item.id,
+          track_name: item.name,
+          artist_name: item.artist,
+          album_name: item.album || "",
+          image_url: item.image_url || "",
+          spotify_url: item.spotify_url || ""
+        };
+        const trackJSON = encodeURIComponent(JSON.stringify(trackObj));
+
+        return `
     <div class="track-card" style="animation-delay: ${i * 0.06}s">
       <div class="track-image">
-        ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}" loading="lazy">` : `<div class="track-placeholder">${item.type === 'podcast' ? '🎙️' : item.type === 'playlist' ? '📋' : '🎵'}</div>`}
+        ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}" loading="lazy">` : `<div class="track-placeholder"></div>`}
+        <div class="track-actions">
+          ${item.type === 'track' ? `<button class="btn-icon btn-like" onclick="toggleLike(this, '${trackJSON}')" title="Beğen"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></button>` : ""}
+          ${item.preview_url ? `<button class="btn-icon btn-play" onclick="playPreview('${item.preview_url}', this)" title="Önizle"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>` : ""}
+          <button class="btn-icon btn-spotify" onclick="playInSpotifyPlayer('${item.type}', '${item.id}')" title="Uygulama içinde oynat">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+          </button>
+        </div>
       </div>
       <div class="track-info">
         <h4 class="track-name">${item.name}</h4>
         <p class="track-artist">${item.artist}</p>
-        <p class="track-album">${item.album}</p>
+        <p class="track-album">${item.album || ''}</p>
       </div>
-      <div class="track-actions">
-        ${item.preview_url ? `<button class="btn-icon btn-play" onclick="playPreview('${item.preview_url}', this)" title="Önizle"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>` : ""}
-        <button class="btn-icon btn-spotify" onclick="playInSpotifyPlayer('${item.type}', '${item.id}')" title="Uygulama içinde oynat">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-        </button>
-      </div>
-    </div>`
+    </div>`;
+      }
     )
     .join("");
+}
+
+// ── Like / Dislike Toggle ──────────────────────────────────────────────────
+async function toggleLike(btnElement, trackJSONEncoded) {
+  try {
+    const trackObj = JSON.parse(decodeURIComponent(trackJSONEncoded));
+    const isLiked = btnElement.classList.contains("liked");
+    const action = isLiked ? "dislike" : "like";
+    
+    await api.likeTrack(trackObj, action);
+    
+    if (action === "like") {
+      btnElement.classList.add("liked");
+      btnElement.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>';
+      showToast("Şarkı beğenilenlere eklendi", "success");
+    } else {
+      btnElement.classList.remove("liked");
+      btnElement.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>';
+      showToast("Şarkı beğenilenlerden çıkarıldı", "info");
+      
+      // If we are currently on the liked page, remove the card from UI
+      if (document.getElementById("page-liked").classList.contains("active")) {
+        btnElement.closest(".track-card").remove();
+        // check if empty
+        const list = document.getElementById("liked-list");
+        if (list.children.length === 0) {
+          list.innerHTML = `
+            <div class="empty-state">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5; margin-bottom: 1rem;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+              <p>Henüz beğenilen şarkı yok.</p>
+            </div>`;
+        }
+      }
+    }
+  } catch (err) {
+    showToast(err.message, "error");
+  }
 }
 
 // ── Audio Preview ────────────────────────────────────────────────────────────
@@ -600,23 +691,40 @@ async function captureAndAnalyze() {
 // ── History ──────────────────────────────────────────────────────────────────
 async function loadHistory() {
   const container = document.getElementById("history-list");
-  container.innerHTML = '<div class="loading-state"><div class="pulse-ring"></div><p>Yükleniyor...</p></div>';
+  container.innerHTML = `
+    <div class="history-list">
+      ${Array(4).fill(`
+        <div class="history-card">
+          <div class="history-mood" style="flex: 1;">
+            <div class="skeleton-image skeleton" style="border-radius: 50%; width: 40px; height: 40px;"></div>
+            <div style="flex: 1; margin-left: 1rem;">
+              <div class="skeleton-text skeleton"></div>
+              <div class="skeleton-text short skeleton"></div>
+            </div>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
 
   try {
     const history = await api.getHistory();
     if (!history.length) {
-      container.innerHTML = '<div class="empty-state"><span>📭</span><p>Henüz bir geçmiş yok.</p></div>';
+      container.innerHTML = `
+        <div class="empty-state">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5; margin-bottom: 1rem;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
+          <p>Henüz bir geçmiş yok.</p>
+        </div>`;
       return;
     }
 
-    const moodIcons = { energetic: "⚡", calm: "🌊", intense: "🔥", chill: "😌" };
+    const moodIcons = { energetic: "", calm: "", intense: "", chill: "" };
 
     container.innerHTML = history
       .map(
         (item, i) => `
       <div class="history-card" style="animation-delay: ${i * 0.05}s">
         <div class="history-mood">
-          <span class="history-icon">${moodIcons[item.mood_category] || "🎵"}</span>
+          <span class="history-icon">${moodIcons[item.mood_category] || ""}</span>
           <div>
             <strong>${item.emotion}</strong>
             <span class="history-source">${item.source}</span>
@@ -633,7 +741,7 @@ async function loadHistory() {
       )
       .join("");
   } catch (err) {
-    container.innerHTML = `<div class="error-state"><span class="error-icon">⚠️</span><p>${err.message}</p></div>`;
+    container.innerHTML = `<div class="error-state"><span class="error-icon"></span><p>${err.message}</p></div>`;
   }
 }
 
@@ -653,37 +761,65 @@ async function deleteHistoryItem(id, btn) {
 // ── Liked Tracks ─────────────────────────────────────────────────────────────
 async function loadLikedTracks() {
   const container = document.getElementById("liked-list");
-  container.innerHTML = '<div class="loading-state"><div class="pulse-ring"></div><p>Yükleniyor...</p></div>';
+  container.innerHTML = `
+    <div class="tracks-grid">
+      ${Array(5).fill(`
+        <div class="track-card">
+          <div class="skeleton-image skeleton"></div>
+          <div class="track-info">
+            <div class="skeleton-text skeleton"></div>
+            <div class="skeleton-text short skeleton"></div>
+          </div>
+        </div>
+      `).join('')}
+    </div>`;
 
   try {
     const tracks = await api.getLikedTracks();
     if (!tracks.length) {
-      container.innerHTML = '<div class="empty-state"><span>💚</span><p>Henüz beğenilen şarkı yok.</p></div>';
+      container.innerHTML = `
+        <div class="empty-state">
+          <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5; margin-bottom: 1rem;"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+          <p>Henüz beğenilen şarkı yok.</p>
+        </div>`;
       return;
     }
 
     container.innerHTML = tracks
       .map(
-        (t, i) => `
+        (t, i) => {
+          const trackObj = {
+            spotify_id: t.id,
+            track_name: t.track_name,
+            artist_name: t.artist_name,
+            album_name: t.album_name || "",
+            image_url: t.image_url || "",
+            spotify_url: t.spotify_url || ""
+          };
+          const trackJSON = encodeURIComponent(JSON.stringify(trackObj));
+
+          return `
       <div class="track-card" style="animation-delay: ${i * 0.06}s">
         <div class="track-image">
-          ${t.image_url ? `<img src="${t.image_url}" alt="${t.track_name}" loading="lazy">` : '<div class="track-placeholder">🎵</div>'}
+          ${t.image_url ? `<img src="${t.image_url}" alt="${t.track_name}" loading="lazy">` : '<div class="track-placeholder"></div>'}
+          <div class="track-actions">
+            <button class="btn-icon btn-like liked" onclick="toggleLike(this, '${trackJSON}')" title="Beğenmekten Vazgeç"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></button>
+            <button class="btn-icon btn-spotify" onclick="playInSpotifyPlayer('track', '${t.spotify_url ? t.spotify_url.split('/').pop() : t.id}')" title="Uygulama içinde oynat">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+            </button>
+          </div>
         </div>
         <div class="track-info">
           <h4 class="track-name">${t.track_name}</h4>
           <p class="track-artist">${t.artist_name}</p>
           <p class="track-album">${t.album_name || ""}</p>
         </div>
-        <div class="track-actions">
-          <button class="btn-icon btn-spotify" onclick="playInSpotifyPlayer('track', '${t.spotify_url.split('/').pop()}')" title="Uygulama içinde oynat">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
-          </button>
-        </div>
-      </div>`
+      </div>`;
+        }
       )
       .join("");
   } catch (err) {
-    container.innerHTML = `<div class="error-state"><span class="error-icon">⚠️</span><p>${err.message}</p></div>`;
+    container.innerHTML = `<div class="error-state"><span class="error-icon"></span><p>${err.message}</p></div>`;
   }
 }
 
@@ -692,8 +828,7 @@ function showToast(message, type = "info") {
   const container = document.getElementById("toast-container");
   const toast = document.createElement("div");
   toast.className = `toast toast-${type}`;
-  const icons = { success: "✅", error: "❌", warning: "⚠️", info: "ℹ️" };
-  toast.innerHTML = `<span>${icons[type] || "ℹ️"}</span><span>${message}</span>`;
+  toast.innerHTML = `<span></span><span>${message}</span>`;
   container.appendChild(toast);
   requestAnimationFrame(() => toast.classList.add("show"));
   setTimeout(() => {

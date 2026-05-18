@@ -8,12 +8,16 @@ RUN apt-get update && apt-get install -y \
     libsm6 \
     libxext6 \
     libxrender-dev \
-    libgl1-mesa-glx \
+    libgl1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Python bağımlılıkları
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
+
+# Create appuser for security
+RUN useradd -m appuser
+USER appuser
 
 # Uygulama kodları
 COPY . .

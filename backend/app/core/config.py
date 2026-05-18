@@ -3,11 +3,12 @@ from pydantic_settings import BaseSettings
 class Settings(BaseSettings):
     # App
     APP_NAME: str = "EmoTuneAI"
-    DEBUG: bool = True
-    SECRET_KEY: str = "change-this-in-production"
+    DEBUG: bool = False  # DO NOT use True in production
+    SECRET_KEY: str = "your-super-secret-key-change-it"
 
     # Database
-    DATABASE_URL: str = "postgresql://postgres:password@localhost:5432/emotune"
+    DATABASE_URL: str = "postgresql://postgres:password@db:5432/emotune"  # Use environment variable in production
+
 
     # Spotify API
     # → https://developer.spotify.com/dashboard adresinden alınır

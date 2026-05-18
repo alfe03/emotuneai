@@ -1,5 +1,6 @@
 // ─── EmoTuneAI API Layer ─────────────────────────────────────────────────────
-const API_BASE = "http://127.0.0.1:8000";
+const isLocal = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost";
+const API_BASE = isLocal ? "http://127.0.0.1:8000" : "https://api.emotuneai.com"; // Üretime alırken burası güncellenecek
 
 class EmoTuneAPI {
   constructor() {
@@ -99,10 +100,11 @@ class EmoTuneAPI {
   }
 
   // ── Music ────────────────────────────────────────────────────────────────────
-  async likeTrack(trackId, action) {
+  async likeTrack(trackObj, action) {
+    // trackObj expects: { spotify_id, track_name, artist_name, album_name, image_url, spotify_url }
     return this.request("/api/music/like", {
       method: "POST",
-      body: JSON.stringify({ track_id: trackId, action }),
+      body: JSON.stringify({ ...trackObj, action }),
     });
   }
 

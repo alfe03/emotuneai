@@ -77,14 +77,19 @@ def spotify_callback(request: Request, db: Session = Depends(get_db)):
     try:
         sp = spotipy.Spotify(auth=access_token)
         user_info = sp.current_user()
-        print(f"Spotify Kullanici Bilgisi: {user_info.get('id')} - {user_info.get('email')}")
+        if user_info:
+            print(f"Spotify Kullanici Bilgisi: {user_info.get('id')} - {user_info.get('email')}")
         
-        email = user_info.get("email")
+        email = user_info.get("email") if user_info else None
         if not email:
-            email = f"{user_info.get('id')}@spotify.com"
+            spotify_id = user_info.get('id') if user_info else None
+            email = f"{spotify_id}@spotify.com"
             
-        username = user_info.get("display_name") or user_info.get("id")
-        images = user_info.get("images") or []
+        user_data = user_info or {}
+        # Ensure username is always a string (fallback to email local-part or generic name)
+        username = user_data.get("display_name") or user_data.get("id") or (email.split('@')[0] if email else "spotify_user")
+        username = str(username)
+        images = user_data.get("images") or []
         avatar_url = images[0].get("url") if images else None
         
         user = get_user_by_email(db, email)
@@ -118,10 +123,14 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
     token = create_access_token(cast(int, user.id))
     return {"access_token": token, "token_type": "bearer"}
 
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+limiter = Limiter(key_func=get_remote_address)
 
 @router.post("/login", response_model=TokenResponse)
-def login(request: LoginRequest, db: Session = Depends(get_db)):
-    user = authenticate_user(db, request.email, request.password)
+@limiter.limit("5/minute")
+def login(request: Request, login_request: LoginRequest, db: Session = Depends(get_db)):
+    user = authenticate_user(db, login_request.email, login_request.password)
     if not user:
         raise HTTPException(status_code=401, detail="E-posta veya şifre hatalı.")
     token = create_access_token(cast(int, user.id))

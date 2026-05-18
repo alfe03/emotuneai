@@ -4,8 +4,8 @@ echo EmoTuneAı Backend başlatılıyor...
 :: PostgreSQL'i başlat
 start "PostgreSQL" "C:\Program Files\PostgreSQL\18\bin\postgres.exe" -D "C:\Program Files\PostgreSQL\18\data"
 
-:: 3 saniye bekle
-timeout /t 3 /nobreak
+:: 8 saniye bekle
+timeout /t 8 /nobreak
 
 :: Tarayıcıyı aç
 start "" "http://localhost:8000/docs"
