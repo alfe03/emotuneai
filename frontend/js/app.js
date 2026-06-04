@@ -14,6 +14,8 @@ let selectedGenre = "";               // "" (Tümü) | "pop" | "rap" | "rock" vs
 let lastMoodCategory = null;          // Son analiz edilen mood (filtre değişince tekrar fetch için)
 let lastEmotion = null;
 let lastSearchQuery = "";             // Sonuçlar içinde arama yapmak için (örn: "Duman")
+let lastRequestedArtist = null;       // Son algılanan veya filtrelenen sanatçı ismi
+
 
 // ── Init ─────────────────────────────────────────────────────────────────────
 async function initApp() {
@@ -320,8 +322,10 @@ async function refetchRecommendations() {
   }
 
   try {
-    const data = await api.manualMood(lastEmotion || lastMoodCategory, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre);
+    const data = await api.manualMood(lastEmotion || lastMoodCategory, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre, lastRequestedArtist);
     currentResults = data;
+    // Update lastRequestedArtist from response to keep it in sync
+    lastRequestedArtist = data.requested_artist || null;
     renderContentList(data.recommendations);
   } catch (err) {
     if (contentArea) {
@@ -335,6 +339,9 @@ async function refetchRecommendations() {
 }
 
 function renderResults(data) {
+  // Sync the last requested artist from the analysis results
+  lastRequestedArtist = data.requested_artist || null;
+
   const moodIcons = {
     energetic: "",
     calm: "",
@@ -377,6 +384,7 @@ function renderResults(data) {
           <span class="mood-category-tag" style="background: ${color}">${label}</span>
         </div>
       </div>
+      ${(data.source === 'video' && data.input_text) ? `<p class="mood-transcript" style="margin-top: 1rem; font-style: italic; opacity: 0.85; background: rgba(255,255,255,0.05); padding: 0.75rem 1rem; border-left: 3px solid ${color}; border-radius: 4px;"><strong>Söyledikleriniz:</strong> "${data.input_text}"</p>` : ""}
       ${data.explanation ? `<p class="mood-explanation">${data.explanation}</p>` : ""}
     </div>
 
@@ -446,11 +454,13 @@ function renderResults(data) {
     resultsSearchInput.addEventListener("keypress", (e) => {
       if (e.key === "Enter") {
         lastSearchQuery = resultsSearchInput.value.trim();
+        lastRequestedArtist = null; // Clear artist filter when manual search is used
         refetchRecommendations();
       }
     });
     btnResultsSearch.addEventListener("click", () => {
       lastSearchQuery = resultsSearchInput.value.trim();
+      lastRequestedArtist = null; // Clear artist filter when manual search is used
       refetchRecommendations();
     });
   }
@@ -645,6 +655,8 @@ function playPreview(url, btn) {
 function setupCameraActions() {
   document.getElementById("btn-start-camera").addEventListener("click", startCamera);
   document.getElementById("btn-capture").addEventListener("click", captureAndAnalyze);
+  const recordBtn = document.getElementById("btn-record-video");
+  if (recordBtn) recordBtn.addEventListener("click", recordVideoAndAnalyze);
 }
 
 async function startCamera() {
@@ -652,14 +664,20 @@ async function startCamera() {
   const placeholder = document.getElementById("camera-placeholder");
 
   try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: "user", width: 640, height: 480 } });
+    cameraStream = await navigator.mediaDevices.getUserMedia({ 
+      video: { facingMode: "user", width: 640, height: 480 },
+      audio: true
+    });
     video.srcObject = cameraStream;
     video.classList.add("active");
     placeholder.classList.remove("active");
     document.getElementById("btn-start-camera").style.display = "none";
     document.getElementById("btn-capture").style.display = "inline-flex";
-  } catch {
-    showToast("Kamera erişimi reddedildi.", "error");
+    const recordBtn = document.getElementById("btn-record-video");
+    if (recordBtn) recordBtn.style.display = "inline-flex";
+  } catch (err) {
+    console.error("Camera access failed:", err);
+    showToast("Kamera veya mikrofon erişimi reddedildi.", "error");
   }
 }
 
@@ -674,6 +692,8 @@ function stopCamera() {
   document.getElementById("camera-placeholder").classList.add("active");
   document.getElementById("btn-start-camera").style.display = "inline-flex";
   document.getElementById("btn-capture").style.display = "none";
+  const recordBtn = document.getElementById("btn-record-video");
+  if (recordBtn) recordBtn.style.display = "none";
 }
 
 async function captureAndAnalyze() {
@@ -686,6 +706,80 @@ async function captureAndAnalyze() {
   stopCamera();
   lastSearchQuery = ""; // Kameradan yüz arandığında aramayı sıfırla
   await performAnalysis(() => api.analyzeFace(base64, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre));
+}
+
+async function recordVideoAndAnalyze() {
+  if (!cameraStream) {
+    showToast("Kamera akışı aktif değil.", "error");
+    return;
+  }
+
+  const btn = document.getElementById("btn-record-video");
+  const captureBtn = document.getElementById("btn-capture");
+  btn.disabled = true;
+  captureBtn.disabled = true;
+
+  try {
+    const chunks = [];
+    const options = { mimeType: 'video/webm;codecs=vp8,opus' };
+    
+    let recorder;
+    try {
+      recorder = new MediaRecorder(cameraStream, options);
+    } catch (e) {
+      console.warn("MimeType not supported, falling back to default recorder options");
+      recorder = new MediaRecorder(cameraStream);
+    }
+
+    recorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        chunks.push(e.data);
+      }
+    };
+
+    recorder.onstop = async () => {
+      const blob = new Blob(chunks, { type: 'video/webm' });
+      
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result.split(',')[1];
+        stopCamera();
+        lastSearchQuery = "";
+        btn.disabled = false;
+        captureBtn.disabled = false;
+        btn.innerHTML = 'Sesli Video Analizi (3sn - Gemini AI)';
+        
+        await performAnalysis(() => api.analyzeVideo(base64, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre));
+      };
+      reader.readAsDataURL(blob);
+    };
+
+    // Start recording
+    recorder.start();
+    
+    let secondsLeft = 3;
+    btn.innerHTML = `Kayıt yapılıyor... (${secondsLeft}sn) 🎙️`;
+    
+    const interval = setInterval(() => {
+      secondsLeft -= 1;
+      if (secondsLeft <= 0) {
+        clearInterval(interval);
+      } else {
+        btn.innerHTML = `Kayıt yapılıyor... (${secondsLeft}sn) 🎙️`;
+      }
+    }, 1000);
+
+    setTimeout(() => {
+      clearInterval(interval);
+      recorder.stop();
+    }, 3000); // Record for 3 seconds
+
+  } catch (err) {
+    showToast("Video kaydı başlatılamadı: " + err.message, "error");
+    btn.disabled = false;
+    captureBtn.disabled = false;
+    btn.innerHTML = 'Sesli Video Analizi (3sn - Gemini AI)';
+  }
 }
 
 // ── History ──────────────────────────────────────────────────────────────────
@@ -727,7 +821,7 @@ async function loadHistory() {
           <span class="history-icon">${moodIcons[item.mood_category] || ""}</span>
           <div>
             <strong>${item.emotion}</strong>
-            <span class="history-source">${item.source}</span>
+            <span class="history-source">${item.source === 'face' ? 'Fotoğraf' : item.source === 'text' ? 'Metin' : item.source === 'manual' ? 'Manuel' : item.source === 'video' ? 'Sesli Video' : item.source}</span>
           </div>
         </div>
         <div class="history-meta">

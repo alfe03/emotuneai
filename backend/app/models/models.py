@@ -13,7 +13,7 @@ class User(Base):
     hashed_password = Column(String, nullable=False)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
-    mood_history = relationship("MoodHistory", back_populates="user")
+    mood_history = relationship("MoodHistory", back_populates="user", cascade="all, delete-orphan")
 
 
 class MoodHistory(Base):
@@ -29,7 +29,7 @@ class MoodHistory(Base):
     created_at    = Column(DateTime(timezone=True), server_default=func.now())
 
     user   = relationship("User", back_populates="mood_history")
-    tracks = relationship("RecommendedTrack", back_populates="mood_entry")
+    tracks = relationship("RecommendedTrack", back_populates="mood_entry", cascade="all, delete-orphan")
 
 
 class RecommendedTrack(Base):

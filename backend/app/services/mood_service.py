@@ -96,6 +96,9 @@ Aşağıdaki 5 kategoriden BİRİNİ seç:
 ## Emoji
 Duyguyu en iyi yansıtan tek bir emoji seç.
 
+## Sanatçı/Şarkıcı Tespiti (requested_artist)
+Kullanıcı metninde belirli bir sanatçı, şarkıcı veya grup adı belirterek şarkı önerisi istemişse (örn: "Duman çal", "Tarkan'dan bir şeyler", "Sezen Aksu dinlemek istiyorum", "Duman'ın hüzünlü şarkıları"), bu sanatçı/grup adının yalın halini (örn: "Duman", "Tarkan", "Sezen Aksu") "requested_artist" alanına yaz. Eğer herhangi bir sanatçı/grup adı belirtilmemişse null yap.
+
 ## Kurallar
 1. Cümlenin genel anlamına, duygusal tonuna ve alt metnine odaklan.
 2. Karmaşık veya çelişkili duygular varsa (örn: "yoruldum ama mutluyum") ikisini de yansıt.
@@ -108,10 +111,12 @@ JSON formatı:
   "emoji": "duyguyu yansıtan tek emoji",
   "confidence": 0-100 arası güven skoru (sayı),
   "mood_category": "energetic | chill | melancholic | intense | calm",
-  "explanation": "Neden bu kategoriyi seçtiğini kısa ve samimi bir şekilde açıkla (türkçe, 1-2 cümle, kullanıcıya hitap et)"
+  "explanation": "Neden bu kategoriyi seçtiğini kısa ve samimi bir şekilde açıkla (türkçe, 1-2 cümle, kullanıcıya hitap et)",
+  "requested_artist": "tespit edilen sanatçı/grup adı (string) veya null"
 }
 
 Kullanıcının metni: """
+
 
 
 # ── Yüz Analizi (DeepFace – değişmedi) ───────────────────────────────────────
@@ -254,6 +259,78 @@ _BLEND_MOOD_RESOLUTION = {
 }
 
 
+def _extract_artist_fallback(text: str) -> str | None:
+    """
+    Kullanıcı metninden basit regex ve kelime eşleşmeleriyle sanatçı adını ayıklar.
+    Örn: "Tarkan'dan", "Duman çal", "Sezen Aksu dinlemek istiyorum", "sanatçı: Ceza"
+    """
+    text_lower = text.lower()
+    
+    # 1. Sanatçı/Şarkıcı belirten özel etiketler (örn: "sanatçı: duman", "artist: tarkan")
+    label_match = re.search(r"(?:sanatçı|şarkıcı|artist)\s*:\s*([A-ZÇĞİÖŞÜa-zçğıöşü\s]{3,25})", text, re.IGNORECASE)
+    if label_match:
+        candidate = label_match.group(1).strip()
+        words = candidate.split()
+        if words:
+            if len(words) >= 2 and words[0][0].isupper() and words[1][0].isupper():
+                return f"{words[0]} {words[1]}"
+            return words[0]
+        
+    # 2. Türkçe kesme işaretli ek kalıpları (örn: Tarkan'dan, Duman'ın, Sezen Aksu'nun)
+    apostrophe_match = re.search(r"\b([A-ZÇĞİÖŞÜa-zçğıöşü\s]+)['’](?:dan|den|tan|ten|ın|in|un|ün|nın|nin|nun|nün)\b", text)
+    if apostrophe_match:
+        candidate = apostrophe_match.group(1).strip()
+        words = candidate.split()
+        if words:
+            if len(words) >= 2 and words[-2][0].isupper():
+                return f"{words[-2]} {words[-1]}"
+            return words[-1]
+
+    # 3. Türkçe ek kalıpları (kesme işareti olmadan, örn: Tarkandan, Dumandan, cartiden)
+    # Yaygın kelimeleri hariç tutuyoruz
+    suffix_match = re.search(r"\b([A-ZÇĞİÖŞÜa-zçğıöşü]+)(?:dan|den|tan|ten)\b", text)
+    if suffix_match:
+        candidate = suffix_match.group(1).strip()
+        excluded = {
+            "ben", "sen", "neden", "zaten", "aniden", "birden", "hemen", "lütfen", "içten", "bazen", 
+            "dünden", "yoldan", "oradan", "buradan", "şuradan", "ordan", "burdan", "şurdan", "ondan",
+            "bundan", "şundan", "candan", "tenden", "günden"
+        }
+        if candidate.lower() not in excluded and len(candidate) > 2:
+            pos = text.find(candidate)
+            before = text[:pos].strip()
+            before_words = before.split()
+            if before_words:
+                last_before = before_words[-1].strip(".,?!\"'()")
+                stop_before = {
+                    "ve", "veya", "bir", "bana", "sana", "o", "bu", "şu", "ile", "de", "da", "ki", 
+                    "en", "çok", "daha", "ben", "sen", "biz", "siz", "onlar", "ama", "fakat", "lakin"
+                }
+                if last_before.lower() not in stop_before and len(last_before) > 2:
+                    return f"{before_words[-1]} {candidate}"
+            return candidate
+
+    # 4. Yönelim/istek kelimelerinden hemen önceki kelimeleri kontrol et
+    # Örn: "sezen aksu dinlemek", "duman çal"
+    for verb in ["dinlemek", "dinle", "çal", "söyle", "öner", "play", "listen"]:
+        pos = text_lower.find(verb)
+        if pos != -1:
+            before = text[:pos].strip()
+            words = before.split()
+            if words:
+                last_word = words[-1]
+                stopwords = {
+                    "bir", "biraz", "ve", "veya", "da", "de", "ki", "ben", "sen", "bana", "bi", "daha",
+                    "şöyle", "böyle", "kendi", "güzel", "hareketli", "sakin", "yavaş", "hızlı", "hüzünlü"
+                }
+                if last_word.lower() not in stopwords and len(last_word) > 2:
+                    if len(words) >= 2 and words[-2][0].isupper() and words[-1][0].isupper():
+                        return f"{words[-2]} {words[-1]}"
+                    return last_word
+                    
+    return None
+
+
 def _fallback_analyze_text(text: str) -> dict:
     """
     Gemini API kullanılamadığında çoklu duygu algılayan akıllı fallback.
@@ -372,12 +449,13 @@ def _fallback_analyze_text(text: str) -> dict:
         explanation = "⚡ Gemini API şu an kullanılamadığı için basit analiz kullanıldı."
 
     return {
-        "emotion":       emotion,
-        "emoji":         emoji,
-        "confidence":    confidence,
-        "mood_category": mood_category,
-        "input_text":    text,
-        "explanation":   explanation,
+        "emotion":          emotion,
+        "emoji":            emoji,
+        "confidence":       confidence,
+        "mood_category":    mood_category,
+        "input_text":       text,
+        "explanation":      explanation,
+        "requested_artist": _extract_artist_fallback(text),
     }
 
 
@@ -411,6 +489,7 @@ def analyze_text(text: str) -> dict:
             confidence = float(result.get("confidence", 50))
             mood_category = result.get("mood_category", "chill")
             explanation = result.get("explanation", "")
+            requested_artist = result.get("requested_artist")
 
             # Mood category doğrulaması
             valid_moods = ["energetic", "chill", "melancholic", "intense", "calm"]
@@ -418,12 +497,13 @@ def analyze_text(text: str) -> dict:
                 mood_category = "chill"
 
             return {
-                "emotion":       emotion,
-                "emoji":         emoji,
-                "confidence":    round(confidence, 2),
-                "mood_category": mood_category,
-                "input_text":    text,
-                "explanation":   explanation,
+                "emotion":          emotion,
+                "emoji":            emoji,
+                "confidence":       round(confidence, 2),
+                "mood_category":    mood_category,
+                "input_text":       text,
+                "explanation":      explanation,
+                "requested_artist": requested_artist if requested_artist else _extract_artist_fallback(text),
             }
 
         except json.JSONDecodeError as e:
@@ -434,9 +514,12 @@ def analyze_text(text: str) -> dict:
 
             # 429 Rate Limit hatası mı kontrol et
             if "429" in error_str or "quota" in error_str.lower() or "rate" in error_str.lower():
+                if "quota" in error_str.lower() or "limit" in error_str.lower():
+                    logger.warning("Gemini günlük kullanım kotası aşılmış. Beklemeden doğrudan fallback analizine geçiliyor.")
+                    break
                 wait_time = INITIAL_RETRY_DELAY * (2 ** attempt)  # 5s, 10s, 20s
                 logger.warning(
-                    f"Gemini API kota hatası (deneme {attempt + 1}/{MAX_RETRIES}). "
+                    f"Gemini API geçici rate limit hatası (deneme {attempt + 1}/{MAX_RETRIES}). "
                     f"{wait_time} saniye bekleniyor..."
                 )
                 time.sleep(wait_time)
@@ -454,7 +537,135 @@ def analyze_text(text: str) -> dict:
     return _fallback_analyze_text(text)
 
 
+
 # ── Mood → Spotify özellikleri ────────────────────────────────────────────────
 
 def get_mood_features(mood_category: str) -> dict:
     return MOOD_TO_FEATURES.get(mood_category, MOOD_TO_FEATURES["chill"])
+
+
+# ── Çok Modlu Video Analizi (Gemini Multimodal Video & Audio) ──────────────────
+
+GEMINI_VIDEO_PROMPT = """Sen bir çok modlu (multimodal) duygu analizi uzmanısın. Gönderilen kısa videoyu hem görsel (yüz ifadesi, mimikler) hem de işitsel (konuşma içeriği, ses tonu) olarak analiz et.
+
+## Yapılacak Analiz
+1. Kişinin yüz ifadesinden, göz ve ağız hareketlerinden, mimiklerinden nasıl hissettiğini çıkar.
+2. Videodaki ses kaydında söylenen sözleri tespit et ve Türkçe yazıya dök (transcript).
+3. Konuşmacının ses tonundan (gergin, neşeli, fısıltılı, yavaş, sakin vb.) hislerini analiz et.
+4. Tüm bu analizleri (görüntü, transkript ve ses tonu) birleştirerek nihai bir duygu durumuna karar ver.
+
+## Ruh Hali Kategorileri (mood_category)
+Aşağıdaki 5 kategoriden BİRİNİ seç:
+- "energetic" → Mutlu, enerjik, heyecanlı, neşeli, coşkulu, motive, eğlenceli, kendini iyi hisseden
+- "chill" → Rahat, huzurlu, keyifli, tatmin olmuş, dingin, gevşemiş, kafası rahat
+- "melancholic" → Üzgün, hüzünlü, nostaljik, duygusal, kırık, yalnız, özlem dolu, içi buruk
+- "intense" → Öfkeli, sinirli, agresif, gergin, isyankâr, patlayacak gibi, sıkılmış, bunalmış
+- "calm" → Sakinleşmek isteyen, endişeli, kaygılı, tedirgin, yorgun, stresli ama rahatlamaya ihtiyacı var
+
+## Duygu Etiketi (emotion)
+Kullanıcının hissini en iyi özetleyen kısa ve samimi bir Türkçe ifade yaz (örn: "Heyecanlı ve coşkulu", "Yorgun ama sakin", "Hüzünlü ve dalgın").
+
+## Emoji
+Duyguyu en iyi yansıtan tek bir emoji seç.
+
+## Kurallar
+1. Videodaki konuşmanın tam transkriptini (transcription) çıkar ve "input_text" alanına yaz. Konuşma yoksa bu alanı boş bırak veya "Konuşma algılanamadı" yaz.
+2. Sadece JSON formatında yanıt ver, başka hiçbir şey yazma.
+
+JSON formatı:
+{
+  "emotion": "kullanıcının hissini özetleyen kısa Türkçe ifade",
+  "emoji": "tek emoji",
+  "confidence": 0-100 arası güven skoru (sayı),
+  "mood_category": "energetic | chill | melancholic | intense | calm",
+  "input_text": "videodaki konuşmanın Türkçe transkripti",
+  "explanation": "Analizini (hem yüz ifadesi hem ses tonu/sözler açısından) kısa ve samimi bir şekilde açıklayan Türkçe 1-2 cümle."
+}
+"""
+
+def analyze_video(video_bytes: bytes) -> dict:
+    """
+    Kullanıcının kaydettiği 3 saniyelik videoyu Gemini 2.0 Flash ile analiz eder.
+    Hem görüntüyü (yüz ifadeleri) hem de sesi (söylenen sözler + ses tonu) kullanarak duygu tespiti yapar.
+    """
+    import tempfile
+    
+    # Geçici dosyaya yaz
+    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as temp_file:
+        temp_file.write(video_bytes)
+        temp_video_path = temp_file.name
+
+    video_file = None
+    try:
+        logger.info(f"Geçici video dosyası oluşturuldu: {temp_video_path}")
+        
+        # Gemini Files API ile yükle
+        video_file = genai.upload_file(path=temp_video_path)
+        logger.info(f"Video Gemini'ye yüklendi, isim: {video_file.name}. İşlenmesi bekleniyor...")
+        
+        # İşlenme durumunu kontrol et
+        attempts = 0
+        while video_file.state.name == "PROCESSING":
+            attempts += 1
+            if attempts > 30: # Max 15 saniye bekle
+                raise ValueError("Video işleme zaman aşımına uğradı.")
+            time.sleep(0.5)
+            video_file = genai.get_file(video_file.name)
+            
+        if video_file.state.name == "FAILED":
+            raise ValueError("Video işleme başarısız oldu (FAILED).")
+            
+        logger.info("Video başarıyla işlendi. Analiz başlatılıyor...")
+        
+        # Analizi yap
+        response = gemini_model.generate_content([video_file, GEMINI_VIDEO_PROMPT])
+        raw_response = response.text.strip()
+        
+        # JSON'ı ayıkla ve çöz
+        json_match = re.search(r'\{[\s\S]*?\}', raw_response)
+        if not json_match:
+            raise ValueError(f"Gemini geçerli bir JSON dönmedi: {raw_response[:200]}")
+            
+        result = json.loads(json_match.group())
+        
+        # Alanları doğrula ve temizle
+        emotion = result.get("emotion", "belirsiz")
+        emoji = result.get("emoji", "🎵")
+        confidence = float(result.get("confidence", 50.0))
+        mood_category = result.get("mood_category", "chill")
+        input_text = result.get("input_text", "")
+        explanation = result.get("explanation", "")
+        
+        valid_moods = ["energetic", "chill", "melancholic", "intense", "calm"]
+        if mood_category not in valid_moods:
+            mood_category = "chill"
+            
+        return {
+            "emotion": emotion,
+            "emoji": emoji,
+            "confidence": round(confidence, 2),
+            "mood_category": mood_category,
+            "input_text": input_text,
+            "explanation": explanation
+        }
+        
+    except Exception as e:
+        logger.error(f"Video analizi sırasında hata: {str(e)}")
+        raise ValueError(f"Video analizi başarısız oldu: {str(e)}")
+        
+    finally:
+        # Google bulutundaki dosyayı temizle
+        if video_file:
+            try:
+                genai.delete_file(video_file.name)
+                logger.info(f"Gemini bulut dosyası silindi: {video_file.name}")
+            except Exception as e:
+                logger.warning(f"Gemini bulut dosyası silinemedi: {e}")
+                
+        # Yerel geçici dosyayı sil
+        if os.path.exists(temp_video_path):
+            try:
+                os.unlink(temp_video_path)
+                logger.info(f"Geçici yerel dosya silindi: {temp_video_path}")
+            except Exception as e:
+                logger.warning(f"Geçici yerel dosya silinemedi: {e}")

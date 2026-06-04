@@ -151,12 +151,105 @@ MOOD_PODCAST_QUERIES = {
 }
 
 
+def _is_matching_artist(artist_name: str, track_artists: list) -> bool:
+    """
+    İstenen sanatçı adının, parça sanatçılarından biriyle tam kelime bazlı eşleşip eşleşmediğini kontrol eder.
+    Böylece 'carti' aramasının 'cameron cartio' ile eşleşmesi gibi alt-kelime (substring) hataları önlenir.
+    """
+    import re
+    artist_lower = artist_name.lower()
+    for ta in track_artists:
+        ta_lower = ta.lower()
+        if artist_lower == ta_lower:
+            return True
+        # Kelime sınırları kullanarak arama yap (örn: \bplayboi carti\b)
+        pattern = r'\b' + re.escape(artist_lower) + r'\b'
+        if re.search(pattern, ta_lower):
+            return True
+    return False
+
+
+def _get_tracks_by_artist_mood(artist_name: str, mood_category: str, limit: int = 10) -> list:
+    """
+    Spesifik bir sanatçının (artist_name) şarkılarını çeker.
+    audio_features API'si Spotify tarafından yeni uygulamalara kapatıldığı için (403),
+    arama sorgusuna duygu durumuna uygun anahtar kelimeler ekleyerek arama yapar.
+    """
+    logger.info(f"Artist mood filter running for artist='{artist_name}', mood='{mood_category}'")
+    
+    # Duygu durumuna uygun Türkçe ve İngilizce anahtar kelimeler
+    mood_keywords = {
+        "energetic": ["hareketli", "dans", "dance", "party", "coşkulu", "remix", "hızlı", "upbeat", "hit"],
+        "calm": ["sakin", "akustik", "acoustic", "soft", "slow", "huzurlu", "dinlendirici"],
+        "intense": ["sert", "agresif", "rock", "metal", "rap", "güçlü", "kızgın"],
+        "chill": ["chill", "rahat", "akşam", "lofi", "akustik", "soft"],
+        "melancholic": ["hüzünlü", "duygusal", "slow", "ayrılık", "ağlatan", "dram", "acı", "efkar", "damar"],
+    }
+    
+    keywords = mood_keywords.get(mood_category, ["müzik"])
+    tracks = []
+    seen_ids = set()
+    
+    # Spotify search limiti maksimum 10'dur (2026 kısıtlaması nedeniyle limit=10 üst sınır)
+    search_limit = min(limit, 10)
+    
+    # 1. Deneme: Sanatçı + Duygu Anahtar Kelimeleri ile arama yap (örn: "Duman hüzünlü")
+    # Her anahtar kelimeyi tek tek deneyerek en iyi sonuçları harmanlayalım
+    for kw in keywords[:3]:  # En güçlü ilk 3 kelimeyi dene
+        if len(tracks) >= search_limit:
+            break
+        try:
+            query = f'{artist_name} {kw}'
+            search_results = sp.search(q=query, type='track', limit=search_limit)
+            items = search_results.get("tracks", {}).get("items", [])
+            for track in items:
+                if track and track.get("id"):
+                    # Şarkının gerçekten o sanatçıya ait olup olmadığını kontrol et (benzer isimli başka bir sanatçı çıkmasın)
+                    track_artists = [a["name"] for a in track.get("artists", [])]
+                    if _is_matching_artist(artist_name, track_artists):
+                        tid = track["id"]
+                        if tid not in seen_ids:
+                            seen_ids.add(tid)
+                            tracks.append(_format_track(track))
+        except Exception as e:
+            logger.warning(f"Error searching {artist_name} {kw}: {e}")
+            
+    # 2. Deneme: Eğer yeterli şarkı bulunamadıysa, genel sanatçı araması yap (örn: artist:"Duman")
+    if len(tracks) < search_limit:
+        try:
+            query = f'artist:"{artist_name}"'
+            search_results = sp.search(q=query, type='track', limit=10)
+            items = search_results.get("tracks", {}).get("items", [])
+            if not items:
+                # Tırnaksız dene
+                search_results = sp.search(q=artist_name, type='track', limit=10)
+                items = search_results.get("tracks", {}).get("items", [])
+                
+            for track in items:
+                if len(tracks) >= search_limit:
+                    break
+                if track and track.get("id"):
+                    track_artists = [a["name"] for a in track.get("artists", [])]
+                    if _is_matching_artist(artist_name, track_artists):
+                        tid = track["id"]
+                        if tid not in seen_ids:
+                            seen_ids.add(tid)
+                            tracks.append(_format_track(track))
+        except Exception as e:
+            logger.error(f"Error in artist general fallback search: {e}")
+            
+    logger.info(f"Artist mood filter found {len(tracks)} tracks for artist='{artist_name}' and mood='{mood_category}'")
+    return tracks[:search_limit]
+
+
+
 # ═════════════════════════════════════════════════════════════════════════════
 #  ANA FONKSİYON
 # ═════════════════════════════════════════════════════════════════════════════
 
 def get_recommendations(mood_category: str, language: str = "mixed",
-                        content_type: str = "track", search_query: str = "", genre: str = "", limit: int = 10) -> list:
+                        content_type: str = "track", search_query: str = "", genre: str = "", limit: int = 10,
+                        requested_artist: str = None) -> list:
     """
     Mood + dil + içerik türüne + (opsiyonel) arama kelimesine ve müzik türüne göre Spotify'dan öneriler getirir.
     """
@@ -169,7 +262,32 @@ def get_recommendations(mood_category: str, language: str = "mixed",
     elif content_type == "podcast":
         return _get_podcasts(mood_category, lang, search_query, genre, limit)
     else:
+        # If no requested_artist is explicitly passed, try to deduce it from search_query
+        if not requested_artist and search_query:
+            from app.services.mood_service import _extract_artist_fallback
+            extracted = _extract_artist_fallback(search_query)
+            if extracted:
+                requested_artist = extracted
+            else:
+                # If search_query itself is likely an artist name (e.g. "Tarkan", "Duman", "Playboi Carti")
+                lowered_sq = search_query.lower()
+                common_keywords = {
+                    "dans", "dance", "party", "upbeat", "hareketli", "coşkulu", "remix", 
+                    "sakin", "akustik", "acoustic", "soft", "slow", "huzurlu", "dinlendirici",
+                    "sert", "agresif", "rock", "metal", "rap", "güçlü", "kızgın", "chill",
+                    "rahat", "akşam", "lofi", "hüzünlü", "duygusal", "ayrılık", "ağlatan", "pop", "classical"
+                }
+                import re
+                if len(lowered_sq) >= 3 and lowered_sq not in common_keywords and re.match(r"^[A-Za-zÇĞİÖŞÜa-zçğıöşü\s\-\.]+$", search_query):
+                    requested_artist = search_query
+
+        if requested_artist:
+            artist_tracks = _get_tracks_by_artist_mood(requested_artist, mood_category, limit)
+            if artist_tracks:
+                return artist_tracks
+            logger.warning(f"Artist specific tracks failed for '{requested_artist}', falling back to standard recommendations.")
         return _get_tracks(mood_category, lang, search_query, genre, limit)
+
 
 
 # ── Şarkı önerileri (yeniden yazıldı) ────────────────────────────────────────
@@ -202,10 +320,121 @@ def _build_track_query(mood_category: str, lang: str, search_query: str, genre: 
     return " ".join(parts)
 
 
+def _get_recommendations_api(mood_category: str, lang: str, genre: str, limit: int) -> list:
+    """Spotify Recommendations API ile duygu durumuna göre şarkı önerir."""
+    # 1) Target audio features mapping
+    target_features = {}
+    if mood_category == "energetic":
+        target_features = {"target_energy": 0.8, "target_valence": 0.7, "target_danceability": 0.7}
+    elif mood_category == "calm":
+        target_features = {"target_energy": 0.35, "target_valence": 0.45, "target_acousticness": 0.6}
+    elif mood_category == "intense":
+        target_features = {"target_energy": 0.85, "target_valence": 0.35, "target_tempo": 130}
+    elif mood_category == "chill":
+        target_features = {"target_energy": 0.5, "target_valence": 0.55, "target_acousticness": 0.3}
+    elif mood_category == "melancholic":
+        target_features = {"target_energy": 0.3, "target_valence": 0.25, "target_acousticness": 0.5}
+
+    # 2) Map genre to Spotify seed genres
+    genre_map = {
+        "pop": "pop",
+        "rap": "hip-hop",
+        "rock": "rock",
+        "indie": "indie",
+        "electronic": "edm",
+        "classical": "classical"
+    }
+    
+    seed_genres = []
+    g = genre_map.get(genre.lower()) if genre else None
+    if g:
+        seed_genres.append(g)
+    else:
+        # Default seed genre based on mood
+        if mood_category == "energetic":
+            seed_genres.append("dance")
+        elif mood_category == "calm":
+            seed_genres.append("ambient")
+        elif mood_category == "intense":
+            seed_genres.append("metal")
+        elif mood_category == "chill":
+            seed_genres.append("chill")
+        elif mood_category == "melancholic":
+            seed_genres.append("rainy-day")
+
+    # 3) Seed Artists (Spotify Artist IDs)
+    seed_artists = []
+    
+    TR_ARTIST_IDS = {
+        "pop": ["5Nn4vJyjT12g1G90bT575y", "611I5uLsp39OFn6297397b", "2F4CIs6n4t67m3EcxJ9vgc"], # Tarkan, Sezen Aksu, Mabel Matiz
+        "rap": ["6vJgN5V79kpxBshP3qgYqg", "07P09qX3sE9S2x0n9A788T"], # Ceza, Ezhel
+        "rock": ["1F4CIs6n4t67m3EcxJ9vgc", "4kL8XgXw4v9Y1Ecz1V4F2E"], # Duman, Mor ve Ötesi
+        "indie": ["34k3y950S6Lz21yC492759", "2F4CIs6n4t67m3EcxJ9vgc"], # Canozan, Mabel Matiz
+        "electronic": ["1382nS212Y9m591YkC9788"], # Mahmut Orhan
+        "classical": ["68z13yC918m2y91X988222"], # Fazıl Say
+        "default": ["5Nn4vJyjT12g1G90bT575y", "1F4CIs6n4t67m3EcxJ9vgc", "611I5uLsp39OFn6297397b"]
+    }
+    
+    GLOBAL_ARTIST_IDS = {
+        "pop": ["06HL4z0CvFAxyCO2zG512g", "66CXWjxzNUsdJxJ2JdwvnR"], # Taylor Swift, Ariana Grande
+        "rap": ["3TVXtAsu4nhprKf2bfUpYY", "26V5477vI006WbDVHns89g"], # Drake, Kanye West
+        "rock": ["711MC97bEsOm6FSzQ56KiJ", "12Chz98pHFMPnRj21gswgm"], # AC/DC, Coldplay
+        "indie": ["418z7mNlP486S4uC9788X2"], # Arctic Monkeys
+        "electronic": ["4q3mJeIpBlmSR284bFWge2"], # Daft Punk
+        "classical": ["2wOqhyv7siWD7i2q1U4PAi"], # Bach
+        "default": ["06HL4z0CvFAxyCO2zG512g", "711MC97bEsOm6FSzQ56KiJ"]
+    }
+
+    if lang == "tr":
+        artist_pool = TR_ARTIST_IDS.get(genre.lower() if genre else "default", TR_ARTIST_IDS["default"])
+        seed_artists = artist_pool[:4]
+    elif lang == "en":
+        artist_pool = GLOBAL_ARTIST_IDS.get(genre.lower() if genre else "default", GLOBAL_ARTIST_IDS["default"])
+        seed_artists = artist_pool[:4]
+    else: # mixed
+        tr_pool = TR_ARTIST_IDS.get(genre.lower() if genre else "default", TR_ARTIST_IDS["default"])
+        global_pool = GLOBAL_ARTIST_IDS.get(genre.lower() if genre else "default", GLOBAL_ARTIST_IDS["default"])
+        seed_artists = [tr_pool[0], global_pool[0]]
+
+    # Limit total seeds to 5 (Spotify constraint)
+    total_seeds = len(seed_genres) + len(seed_artists)
+    if total_seeds > 5:
+        seed_artists = seed_artists[:5 - len(seed_genres)]
+
+    params = {
+        "seed_genres": seed_genres,
+        "seed_artists": seed_artists,
+        "limit": limit,
+        **target_features
+    }
+    
+    if lang == "tr":
+        params["market"] = "TR"
+    elif lang == "en":
+        params["market"] = "US"
+
+    results = sp.recommendations(**params)
+    tracks = []
+    for track in results.get("tracks", []):
+        tracks.append(_format_track(track))
+    return tracks
+
+
 def _get_tracks(mood_category: str, lang: str, search_query: str, genre: str, limit: int) -> list:
     """Doğrudan track araması — daha isabetli sonuçlar."""
     market = LANG_MARKET.get(lang)
     existing = []
+
+    # Strateji 0: Spotify Recommendations API (Arama filtresi yoksa ve en kaliteli sonuçları istiyorsak)
+    if not search_query:
+        try:
+            logger.info(f"Using Spotify Recommendations API for mood='{mood_category}', lang='{lang}', genre='{genre}'")
+            tracks = _get_recommendations_api(mood_category, lang, genre, limit)
+            if tracks:
+                logger.info(f"Recommendations API returned {len(tracks)} tracks")
+                return tracks
+        except Exception as e:
+            logger.error(f"Recommendations API failed, falling back to search: {e}")
 
     # Strateji 1: Sanatçı bazlı arama (Türkçe seçildiyse)
     if lang == "tr" and not search_query:
@@ -297,7 +526,7 @@ def _search_by_turkish_artists(mood_category: str, genre: str, limit: int, marke
 
 
 def _search_tracks_direct(query: str, limit: int, market: str | None = None) -> list:
-    search_kwargs = {"q": query, "type": "track", "limit": min(limit, 50)}
+    search_kwargs = {"q": query, "type": "track", "limit": min(limit, 10)}
     if market:
         search_kwargs["market"] = market
     try:
@@ -319,7 +548,7 @@ def _get_playlists(mood_category: str, lang: str, search_query: str, genre: str,
     market = LANG_MARKET.get(lang)
 
     try:
-        search_kwargs = {"q": query, "type": "playlist", "limit": limit}
+        search_kwargs = {"q": query, "type": "playlist", "limit": min(limit, 10)}
         if market:
             search_kwargs["market"] = market
 
@@ -359,8 +588,9 @@ def _get_podcasts(mood_category: str, lang: str, search_query: str, genre: str, 
     market = LANG_MARKET.get(lang) or "TR"
 
     try:
-        results = sp.search(q=query, type="show", limit=limit, market=market)
+        results = sp.search(q=query, type="show", limit=min(limit, 10), market=market)
         shows = results.get("shows", {}).get("items", [])
+
 
         return [
             {

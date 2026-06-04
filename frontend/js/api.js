@@ -85,6 +85,13 @@ class EmoTuneAPI {
     });
   }
 
+  async analyzeVideo(videoBase64, language = "mixed", contentType = "track", searchQuery = "", genre = "") {
+    return this.request("/api/mood/analyze/video", {
+      method: "POST",
+      body: JSON.stringify({ video_base64: videoBase64, language, content_type: contentType, search_query: searchQuery, genre }),
+    });
+  }
+
   async analyzeText(text, language = "mixed", contentType = "track", searchQuery = "", genre = "") {
     return this.request("/api/mood/analyze/text", {
       method: "POST",
@@ -92,10 +99,10 @@ class EmoTuneAPI {
     });
   }
 
-  async manualMood(mood, language = "mixed", contentType = "track", searchQuery = "", genre = "") {
+  async manualMood(mood, language = "mixed", contentType = "track", searchQuery = "", genre = "", requestedArtist = null) {
     return this.request("/api/mood/manual", {
       method: "POST",
-      body: JSON.stringify({ mood, language, content_type: contentType, search_query: searchQuery, genre }),
+      body: JSON.stringify({ mood, language, content_type: contentType, search_query: searchQuery, genre, requested_artist: requestedArtist }),
     });
   }
 
