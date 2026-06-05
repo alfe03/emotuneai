@@ -419,6 +419,10 @@ function renderResults(data) {
           <option value="indie" ${selectedGenre === 'indie' ? 'selected' : ''}>Indie</option>
           <option value="electronic" ${selectedGenre === 'electronic' ? 'selected' : ''}>Elektronik</option>
           <option value="classical" ${selectedGenre === 'classical' ? 'selected' : ''}>Klasik</option>
+          <option value="jazz" ${selectedGenre === 'jazz' ? 'selected' : ''}>Caz (Jazz)</option>
+          <option value="blues" ${selectedGenre === 'blues' ? 'selected' : ''}>Blues</option>
+          <option value="metal" ${selectedGenre === 'metal' ? 'selected' : ''}>Metal</option>
+          <option value="r&b" ${selectedGenre === 'r&b' ? 'selected' : ''}>R&B / Soul</option>
         </select>
       </div>
       <div class="filter-divider"></div>

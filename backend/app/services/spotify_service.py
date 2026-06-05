@@ -14,6 +14,29 @@ sp = spotipy.Spotify(
         client_secret=settings.SPOTIFY_CLIENT_SECRET
     )
 )
+# Spotify Recommendations API'si yeni hesaplarda kapalıdır.
+# İlk hatada bu flag False olarak işaretlenip doğrudan arama yöntemine geçilecektir.
+SPOTIFY_RECOMMENDATIONS_SUPPORTED = True
+
+SPAM_KEYWORDS = [
+    "binaural", "meditasyon", "meditation", "relaxing", "uyku", "sleep", 
+    "432 hz", "432hz", "528 hz", "528hz", "solfeggio", "white noise", 
+    "rain sounds", "lullaby", "sound therapy", "healing frequency", 
+    "rahatlatıcı müzik", "deep sleep", "focus music", "study beats", 
+    "ambient sounds", "frekans", "delta waves", "alfa dalgaları", 
+    "beyin dalgaları", "brain waves", "sakinleştirici", "relaxing music",
+    "nature sounds", "doğa sesleri"
+]
+
+def _is_noise_track(track: dict) -> bool:
+    name = track.get("name", "").lower()
+    album = track.get("album", {}).get("name", "").lower() if track.get("album") else ""
+    artists = " ".join([a.get("name", "").lower() for a in track.get("artists", [])])
+    
+    for kw in SPAM_KEYWORDS:
+        if kw in name or kw in album or kw in artists:
+            return True
+    return False
 
 # ── Türk Sanatçı Havuzu (tür bazlı) ─────────────────────────────────────────
 # Spotify aramasında dil filtresi olmadığı için bilinen sanatçı isimleri kullanıyoruz
@@ -49,6 +72,18 @@ TR_ARTISTS = {
     ],
     "classical": [
         "Fazıl Say", "İdil Biret", "Cihat Aşkın", "Burçin Büke",
+    ],
+    "jazz": [
+        "Jülide Özçelik", "Birsen Tezer", "Elif Çağlar", "Kerem Görsev", "İlhan Erşahin"
+    ],
+    "blues": [
+        "Sahte Rakı", "Can Gox", "Batu Mutlugil", "Yavuz Çetin"
+    ],
+    "metal": [
+        "Pentagram", "Almora", "Hayko Cepkin", "Murder King"
+    ],
+    "r&b": [
+        "Güneş", "Sefo", "Mela Bedel", "Kardelen"
     ],
     "default": [
         "Tarkan", "Sezen Aksu", "Duman", "Ceza", "Sıla", "Mabel Matiz",
@@ -101,15 +136,43 @@ MOOD_GENRE_QUERIES = {
         "chill":       ["classical relaxing", "classical guitar", "satie"],
         "melancholic": ["classical sad", "chopin nocturne", "adagio"],
     },
+    "jazz": {
+        "energetic":   ["upbeat jazz", "swing jazz", "big band swing", "fast jazz"],
+        "calm":        ["calm jazz", "peaceful jazz", "soft jazz piano", "ballad jazz"],
+        "intense":     ["free jazz", "avant garde jazz", "intense jazz fusion"],
+        "chill":       ["chill jazz", "smooth jazz", "cool jazz", "late night jazz"],
+        "melancholic": ["sad jazz", "melancholic jazz", "blue jazz", "slow jazz ballad"],
+    },
+    "blues": {
+        "energetic":   ["upbeat blues", "chicago blues", "blues rock", "boogie woogie"],
+        "calm":        ["soft blues", "acoustic blues", "calm blues"],
+        "intense":     ["electric blues guitar", "hard blues rock", "screaming blues"],
+        "chill":       ["chill blues", "smooth blues", "soul blues"],
+        "melancholic": ["sad blues", "lonely blues", "melancholic blues", "slow blues ballad"],
+    },
+    "metal": {
+        "energetic":   ["thrash metal", "power metal", "speed metal", "melodic death metal"],
+        "calm":        ["acoustic metal", "symphonic metal ballad", "soft metal acoustic"],
+        "intense":     ["heavy metal", "death metal", "black metal", "brutal metal"],
+        "chill":       ["progressive metal chill", "atmospheric metal", "doom metal slow"],
+        "melancholic": ["doom metal", "gothic metal", "melancholic metal", "sad metal ballad"],
+    },
+    "r&b": {
+        "energetic":   ["r&b dance", "uptempo r&b", "r&b club hits", "energetic r&b"],
+        "calm":        ["soft r&b", "calm r&b", "acoustic r&b"],
+        "intense":     ["powerful r&b", "trapsoul", "intense r&b vocals"],
+        "chill":       ["chill r&b", "smooth r&b", "neo soul", "late night r&b"],
+        "melancholic": ["sad r&b", "melancholic r&b", "heartbreak r&b", "slow r&b ballad"],
+    },
 }
 
 # Tür belirtilmemişse kullanılacak genel sorgular
 MOOD_DEFAULT_QUERIES = {
-    "energetic":   ["hit şarkılar", "party mix", "enerjik müzik", "dans"],
-    "calm":        ["sakin müzik", "slow şarkılar", "akustik", "huzur"],
-    "intense":     ["güçlü şarkılar", "rock metal", "agresif müzik"],
-    "chill":       ["chill mix", "rahat müzik", "lofi", "akşam keyfi"],
-    "melancholic": ["hüzünlü şarkılar", "duygusal", "ayrılık şarkıları", "ağlatan"],
+    "energetic":   ["pop hits", "party dance hits", "upbeat pop", "dans pop hits"],
+    "calm":        ["akustik pop slow", "soft acoustic", "sakin pop", "slow akustik"],
+    "intense":     ["rock anthems", "power rock metal", "aggressive rap", "sert rap"],
+    "chill":       ["chill lofi beats", "chill pop hits", "easy listening pop", "akşam keyfi lofi"],
+    "melancholic": ["duygusal slow pop", "sad indie ballad", "hüzünlü slow", "slow şarkılar"],
 }
 
 # Dil bazlı ek sorgular
@@ -206,7 +269,7 @@ def _get_tracks_by_artist_mood(artist_name: str, mood_category: str, limit: int 
                 if track and track.get("id"):
                     # Şarkının gerçekten o sanatçıya ait olup olmadığını kontrol et (benzer isimli başka bir sanatçı çıkmasın)
                     track_artists = [a["name"] for a in track.get("artists", [])]
-                    if _is_matching_artist(artist_name, track_artists):
+                    if _is_matching_artist(artist_name, track_artists) and not _is_noise_track(track):
                         tid = track["id"]
                         if tid not in seen_ids:
                             seen_ids.add(tid)
@@ -230,7 +293,7 @@ def _get_tracks_by_artist_mood(artist_name: str, mood_category: str, limit: int 
                     break
                 if track and track.get("id"):
                     track_artists = [a["name"] for a in track.get("artists", [])]
-                    if _is_matching_artist(artist_name, track_artists):
+                    if _is_matching_artist(artist_name, track_artists) and not _is_noise_track(track):
                         tid = track["id"]
                         if tid not in seen_ids:
                             seen_ids.add(tid)
@@ -342,7 +405,11 @@ def _get_recommendations_api(mood_category: str, lang: str, genre: str, limit: i
         "rock": "rock",
         "indie": "indie",
         "electronic": "edm",
-        "classical": "classical"
+        "classical": "classical",
+        "jazz": "jazz",
+        "blues": "blues",
+        "metal": "metal",
+        "r&b": "r-n-b"
     }
     
     seed_genres = []
@@ -425,8 +492,9 @@ def _get_tracks(mood_category: str, lang: str, search_query: str, genre: str, li
     market = LANG_MARKET.get(lang)
     existing = []
 
+    global SPOTIFY_RECOMMENDATIONS_SUPPORTED
     # Strateji 0: Spotify Recommendations API (Arama filtresi yoksa ve en kaliteli sonuçları istiyorsak)
-    if not search_query:
+    if not search_query and SPOTIFY_RECOMMENDATIONS_SUPPORTED:
         try:
             logger.info(f"Using Spotify Recommendations API for mood='{mood_category}', lang='{lang}', genre='{genre}'")
             tracks = _get_recommendations_api(mood_category, lang, genre, limit)
@@ -434,7 +502,15 @@ def _get_tracks(mood_category: str, lang: str, search_query: str, genre: str, li
                 logger.info(f"Recommendations API returned {len(tracks)} tracks")
                 return tracks
         except Exception as e:
-            logger.error(f"Recommendations API failed, falling back to search: {e}")
+            error_str = str(e)
+            if "404" in error_str or "403" in error_str or "not found" in error_str.lower() or "forbidden" in error_str.lower():
+                SPOTIFY_RECOMMENDATIONS_SUPPORTED = False
+                logger.warning(
+                    "Spotify Recommendations API is restricted/deprecated for this developer account (404/403). "
+                    "Bypassing Strateji 0 and falling back to search query recommendations permanently."
+                )
+            else:
+                logger.error(f"Recommendations API failed, falling back to search: {e}")
 
     # Strateji 1: Sanatçı bazlı arama (Türkçe seçildiyse)
     if lang == "tr" and not search_query:
@@ -514,7 +590,7 @@ def _search_by_turkish_artists(mood_category: str, genre: str, limit: int, marke
 
             results = sp.search(**search_kwargs)
             for track in results.get("tracks", {}).get("items", []):
-                if track and track.get("id"):
+                if track and track.get("id") and not _is_noise_track(track):
                     all_tracks.append(_format_track(track))
 
         except Exception as e:
@@ -533,7 +609,7 @@ def _search_tracks_direct(query: str, limit: int, market: str | None = None) -> 
         results = sp.search(**search_kwargs)
         tracks = []
         for track in results.get("tracks", {}).get("items", []):
-            if track and track.get("id"):
+            if track and track.get("id") and not _is_noise_track(track):
                 tracks.append(_format_track(track))
         return tracks
     except Exception as e:

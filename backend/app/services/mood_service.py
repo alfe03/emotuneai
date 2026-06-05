@@ -18,7 +18,10 @@ logger = logging.getLogger(__name__)
 # ── Gemini AI Kurulumu ────────────────────────────────────────────────────────
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
-gemini_model = genai.GenerativeModel("gemini-2.0-flash")
+gemini_model_35 = genai.GenerativeModel("gemini-3.5-flash")
+gemini_model_20 = genai.GenerativeModel("gemini-2.0-flash")
+gemini_model_25 = genai.GenerativeModel("gemini-2.5-flash")
+gemini_model_15 = genai.GenerativeModel("gemini-flash-latest")
 
 # Retry ayarları
 MAX_RETRIES = 3
@@ -464,74 +467,81 @@ def _fallback_analyze_text(text: str) -> dict:
 def analyze_text(text: str) -> dict:
     """
     Kullanıcının yazdığı metni Gemini AI ile analiz eder.
-    429 hatasında üstel bekleme ile tekrar dener.
+    Gemini 2.0 kota hatası verirse Gemini 1.5 modelini dener.
     Tüm denemeler başarısız olursa anahtar kelime tabanlı fallback kullanır.
     """
     last_error = None
+    models_to_try = [
+        ("gemini-3.5-flash", gemini_model_35),
+        ("gemini-2.0-flash", gemini_model_20),
+        ("gemini-2.5-flash", gemini_model_25),
+        ("gemini-flash-latest", gemini_model_15)
+    ]
 
-    for attempt in range(MAX_RETRIES):
-        try:
-            prompt = GEMINI_MOOD_PROMPT + f'"{text}"'
+    for model_name, model in models_to_try:
+        for attempt in range(2):  # Model başına en fazla 2 deneme
+            try:
+                prompt = GEMINI_MOOD_PROMPT + f'"{text}"'
+                response = model.generate_content(prompt)
+                raw_response = response.text.strip()
 
-            response = gemini_model.generate_content(prompt)
-            raw_response = response.text.strip()
+                # JSON bloğunu ayıkla (```json ... ``` veya düz JSON)
+                json_match = re.search(r'\{[\s\S]*?\}', raw_response)
+                if not json_match:
+                    raise ValueError(f"Gemini'den geçerli JSON alınamadı: {raw_response[:200]}")
 
-            # JSON bloğunu ayıkla (```json ... ``` veya düz JSON)
-            json_match = re.search(r'\{[\s\S]*?\}', raw_response)
-            if not json_match:
-                raise ValueError(f"Gemini'den geçerli JSON alınamadı: {raw_response[:200]}")
+                result = json.loads(json_match.group())
 
-            result = json.loads(json_match.group())
+                # Gerekli alanları doğrula
+                emotion = result.get("emotion", "belirsiz")
+                emoji = result.get("emoji", "🎵")
+                confidence = float(result.get("confidence", 50))
+                mood_category = result.get("mood_category", "chill")
+                explanation = result.get("explanation", "")
+                requested_artist = result.get("requested_artist")
 
-            # Gerekli alanları doğrula
-            emotion = result.get("emotion", "belirsiz")
-            emoji = result.get("emoji", "🎵")
-            confidence = float(result.get("confidence", 50))
-            mood_category = result.get("mood_category", "chill")
-            explanation = result.get("explanation", "")
-            requested_artist = result.get("requested_artist")
+                # Mood category doğrulaması
+                valid_moods = ["energetic", "chill", "melancholic", "intense", "calm"]
+                if mood_category not in valid_moods:
+                    mood_category = "chill"
 
-            # Mood category doğrulaması
-            valid_moods = ["energetic", "chill", "melancholic", "intense", "calm"]
-            if mood_category not in valid_moods:
-                mood_category = "chill"
+                logger.info(f"Metin analizi başarıyla tamamlandı (Model: {model_name})")
+                return {
+                    "emotion":          emotion,
+                    "emoji":            emoji,
+                    "confidence":       round(confidence, 2),
+                    "mood_category":    mood_category,
+                    "input_text":       text,
+                    "explanation":      explanation,
+                    "requested_artist": requested_artist if requested_artist else _extract_artist_fallback(text),
+                }
 
-            return {
-                "emotion":          emotion,
-                "emoji":            emoji,
-                "confidence":       round(confidence, 2),
-                "mood_category":    mood_category,
-                "input_text":       text,
-                "explanation":      explanation,
-                "requested_artist": requested_artist if requested_artist else _extract_artist_fallback(text),
-            }
+            except json.JSONDecodeError as e:
+                raise ValueError(f"Gemini yanıtı JSON olarak ayrıştırılamadı: {str(e)}")
+            except Exception as e:
+                last_error = e
+                error_str = str(e)
 
-        except json.JSONDecodeError as e:
-            raise ValueError(f"Gemini yanıtı JSON olarak ayrıştırılamadı: {str(e)}")
-        except Exception as e:
-            last_error = e
-            error_str = str(e)
-
-            # 429 Rate Limit hatası mı kontrol et
-            if "429" in error_str or "quota" in error_str.lower() or "rate" in error_str.lower():
-                if "quota" in error_str.lower() or "limit" in error_str.lower():
-                    logger.warning("Gemini günlük kullanım kotası aşılmış. Beklemeden doğrudan fallback analizine geçiliyor.")
+                # 429 Rate Limit hatası mı kontrol et
+                if "429" in error_str or "quota" in error_str.lower() or "rate limit" in error_str.lower() or "rate_limit" in error_str.lower():
+                    if "quota" in error_str.lower() or "limit" in error_str.lower():
+                        logger.warning(f"{model_name} günlük kullanım kotası aşılmış. Bir sonraki model/seçeneğe geçiliyor.")
+                        break # Bu modeli bırak, sonraki modele geç
+                    wait_time = INITIAL_RETRY_DELAY * (2 ** attempt)  # 5s, 10s
+                    logger.warning(
+                        f"Gemini API geçici rate limit hatası ({model_name}, deneme {attempt + 1}/2). "
+                        f"{wait_time} saniye bekleniyor..."
+                    )
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    # Diğer hatalar (örn. 401 veya beklenmedik hatalar) için sonraki modele geç
+                    logger.error(f"Gemini API hatası ({model_name}): {error_str}")
                     break
-                wait_time = INITIAL_RETRY_DELAY * (2 ** attempt)  # 5s, 10s, 20s
-                logger.warning(
-                    f"Gemini API geçici rate limit hatası (deneme {attempt + 1}/{MAX_RETRIES}). "
-                    f"{wait_time} saniye bekleniyor..."
-                )
-                time.sleep(wait_time)
-                continue
-            else:
-                # 429 dışında bir hata → fallback'e düş
-                logger.error(f"Gemini API hatası: {error_str}")
-                break
 
     # Tüm denemeler başarısız → fallback kullan
     logger.warning(
-        f"Gemini API {MAX_RETRIES} denemeden sonra başarısız oldu. "
+        f"Tüm Gemini modelleri denemelerden sonra başarısız oldu. "
         f"Fallback analiz kullanılıyor. Son hata: {last_error}"
     )
     return _fallback_analyze_text(text)
@@ -618,7 +628,25 @@ def analyze_video(video_bytes: bytes) -> dict:
         logger.info("Video başarıyla işlendi. Analiz başlatılıyor...")
         
         # Analizi yap
-        response = gemini_model.generate_content([video_file, GEMINI_VIDEO_PROMPT])
+        response = None
+        last_err = None
+        for model_name, model in [
+            ("gemini-3.5-flash", gemini_model_35),
+            ("gemini-2.0-flash", gemini_model_20),
+            ("gemini-2.5-flash", gemini_model_25),
+            ("gemini-flash-latest", gemini_model_15)
+        ]:
+            try:
+                logger.info(f"Video analizi yapılıyor (Model: {model_name})...")
+                response = model.generate_content([video_file, GEMINI_VIDEO_PROMPT])
+                break
+            except Exception as e:
+                last_err = e
+                logger.warning(f"Video analizi {model_name} ile başarısız oldu: {e}")
+        
+        if not response:
+            raise ValueError(f"Video analizi tüm modellerle başarısız oldu: {last_err}")
+            
         raw_response = response.text.strip()
         
         # JSON'ı ayıkla ve çöz
