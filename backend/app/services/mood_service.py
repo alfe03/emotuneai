@@ -1,7 +1,5 @@
 import os
 os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
-# Ağ hatalarına karşı proxy veya retry eklemek için (gerekirse)
-os.environ["CURL_CA_BUNDLE"] = ""
 
 from deepface import DeepFace
 import google.generativeai as genai
@@ -486,7 +484,7 @@ def analyze_text(text: str) -> dict:
                 raw_response = response.text.strip()
 
                 # JSON bloğunu ayıkla (```json ... ``` veya düz JSON)
-                json_match = re.search(r'\{[\s\S]*?\}', raw_response)
+                json_match = re.search(r'\{(?:[^{}]|\{[^{}]*\})*\}', raw_response)
                 if not json_match:
                     raise ValueError(f"Gemini'den geçerli JSON alınamadı: {raw_response[:200]}")
 
@@ -517,7 +515,9 @@ def analyze_text(text: str) -> dict:
                 }
 
             except json.JSONDecodeError as e:
-                raise ValueError(f"Gemini yanıtı JSON olarak ayrıştırılamadı: {str(e)}")
+                last_error = e
+                logger.warning(f"Gemini yanıtı JSON olarak ayrıştırılamadı ({model_name}): {str(e)}")
+                break  # Bu modeli bırak, sonraki modele geç
             except Exception as e:
                 last_error = e
                 error_str = str(e)
@@ -650,7 +650,7 @@ def analyze_video(video_bytes: bytes) -> dict:
         raw_response = response.text.strip()
         
         # JSON'ı ayıkla ve çöz
-        json_match = re.search(r'\{[\s\S]*?\}', raw_response)
+        json_match = re.search(r'\{(?:[^{}]|\{[^{}]*\})*\}', raw_response)
         if not json_match:
             raise ValueError(f"Gemini geçerli bir JSON dönmedi: {raw_response[:200]}")
             

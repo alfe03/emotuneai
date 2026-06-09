@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from app.core.database import get_db
@@ -31,8 +31,8 @@ def get_mood_graph(
     current_user: User = Depends(get_current_user)
 ):
     """Kullanıcının son 7 gün içindeki mood dağılımını getirir."""
-    from datetime import datetime, timedelta
-    since = datetime.utcnow() - timedelta(days=days)
+    from datetime import datetime, timedelta, timezone
+    since = datetime.now(timezone.utc) - timedelta(days=days)
 
     results = (
         db.query(
@@ -66,7 +66,6 @@ def delete_history(
     ).first()
 
     if not entry:
-        from fastapi import HTTPException
         raise HTTPException(status_code=404, detail="Kayıt bulunamadı")
     
     db.delete(entry)

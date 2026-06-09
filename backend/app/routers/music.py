@@ -51,6 +51,9 @@ def like_track(
             return {"message": "Şarkı beğenilenlerden çıkarıldı."}
         return {"message": "Şarkı zaten favorilerde yok."}
 
+    else:
+        raise HTTPException(status_code=400, detail=f"Geçersiz action: '{request.action}'. 'like' veya 'dislike' olmalı.")
+
 @router.get("/liked")
 def get_liked_tracks(
     db: Session = Depends(get_db),

@@ -11,6 +11,9 @@ from app.core.dependencies import get_current_user
 from app.services.auth_service import create_user, authenticate_user, create_access_token, get_user_by_email
 from app.schemas.user import RegisterRequest, LoginRequest, TokenResponse, UserResponse
 from app.models.models import User
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -57,28 +60,28 @@ def spotify_callback(request: Request, db: Session = Depends(get_db)):
         frontend_url = DEFAULT_FRONTEND_URL
     
     if error:
-        print(f"Spotify'dan hata dondu: {error}")
+        logger.warning(f"Spotify'dan hata döndü: {error}")
         return RedirectResponse(url=build_redirect_url(frontend_url, {"error": error}))
         
     if not code:
-        print("Spotify 'code' parametresi gondermedi!")
+        logger.warning("Spotify 'code' parametresi göndermedi!")
         return RedirectResponse(url=build_redirect_url(frontend_url, {"error": "no_code"}))
 
     sp_oauth = get_spotify_oauth()
     try:
-        print("Token aliniyor...")
+        logger.info("Token alınıyor...")
         token_info = sp_oauth.get_access_token(code)
         access_token = token_info.get("access_token")
-        print("Token basariyla alindi.")
+        logger.info("Token başarıyla alındı.")
     except Exception as e:
-        print(f"Token alinirken hata: {str(e)}")
+        logger.error(f"Token alınırken hata: {str(e)}")
         return RedirectResponse(url=build_redirect_url(frontend_url, {"error": "token_exception"}))
 
     try:
         sp = spotipy.Spotify(auth=access_token)
         user_info = sp.current_user()
         if user_info:
-            print(f"Spotify Kullanici Bilgisi: {user_info.get('id')} - {user_info.get('email')}")
+            logger.info(f"Spotify Kullanıcı Bilgisi: {user_info.get('id')} - {user_info.get('email')}")
         
         email = user_info.get("email") if user_info else None
         if not email:
@@ -98,9 +101,9 @@ def spotify_callback(request: Request, db: Session = Depends(get_db)):
             import string
             random_password = "".join(secrets.choice(string.ascii_letters + string.digits) for i in range(16))
             user = create_user(db, email=email, username=username, password=random_password)
-            print("Yeni kullanici veritabanina kaydedildi.")
+            logger.info("Yeni kullanıcı veritabanına kaydedildi.")
         else:
-            print("Mevcut kullanici ile giris yapildi.")
+            logger.info("Mevcut kullanıcı ile giriş yapıldı.")
 
         jwt_token = create_access_token(cast(int, user.id))
         
@@ -108,11 +111,11 @@ def spotify_callback(request: Request, db: Session = Depends(get_db)):
         if avatar_url:
             params["avatar"] = avatar_url
         redirect_url = build_redirect_url(frontend_url, params)
-        print(f"Frontend'e yonlendiriliyor: {redirect_url}")
+        logger.info(f"Frontend'e yönlendiriliyor: {redirect_url}")
         return RedirectResponse(url=redirect_url)
         
     except Exception as e:
-        print(f"Kullanici islemlerinde hata: {str(e)}")
+        logger.error(f"Kullanıcı işlemlerinde hata: {str(e)}")
         return RedirectResponse(url=build_redirect_url(frontend_url, {"error": "user_creation_failed"}))
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)

@@ -4,18 +4,32 @@ from spotipy.oauth2 import SpotifyClientCredentials
 from app.core.config import settings
 import random
 import logging
+import re
+import threading
 
 logger = logging.getLogger(__name__)
 
-# Spotify client
-sp = spotipy.Spotify(
-    auth_manager=SpotifyClientCredentials(
-        client_id=settings.SPOTIFY_CLIENT_ID,
-        client_secret=settings.SPOTIFY_CLIENT_SECRET
-    )
-)
+# Spotify client — lazy initialization ile oluşturulur (boş key'lerde crash önlenir)
+_sp_instance = None
+_sp_lock = threading.Lock()
+
+def _get_spotify_client() -> spotipy.Spotify:
+    """Thread-safe lazy Spotify client."""
+    global _sp_instance
+    if _sp_instance is None:
+        with _sp_lock:
+            if _sp_instance is None:
+                _sp_instance = spotipy.Spotify(
+                    auth_manager=SpotifyClientCredentials(
+                        client_id=settings.SPOTIFY_CLIENT_ID,
+                        client_secret=settings.SPOTIFY_CLIENT_SECRET
+                    )
+                )
+    return _sp_instance
+
 # Spotify Recommendations API'si yeni hesaplarda kapalıdır.
 # İlk hatada bu flag False olarak işaretlenip doğrudan arama yöntemine geçilecektir.
+_recommendations_lock = threading.Lock()
 SPOTIFY_RECOMMENDATIONS_SUPPORTED = True
 
 SPAM_KEYWORDS = [
@@ -219,7 +233,6 @@ def _is_matching_artist(artist_name: str, track_artists: list) -> bool:
     İstenen sanatçı adının, parça sanatçılarından biriyle tam kelime bazlı eşleşip eşleşmediğini kontrol eder.
     Böylece 'carti' aramasının 'cameron cartio' ile eşleşmesi gibi alt-kelime (substring) hataları önlenir.
     """
-    import re
     artist_lower = artist_name.lower()
     for ta in track_artists:
         ta_lower = ta.lower()
@@ -239,6 +252,8 @@ def _get_tracks_by_artist_mood(artist_name: str, mood_category: str, limit: int 
     arama sorgusuna duygu durumuna uygun anahtar kelimeler ekleyerek arama yapar.
     """
     logger.info(f"Artist mood filter running for artist='{artist_name}', mood='{mood_category}'")
+    
+    sp = _get_spotify_client()
     
     # Duygu durumuna uygun Türkçe ve İngilizce anahtar kelimeler
     mood_keywords = {
@@ -312,7 +327,7 @@ def _get_tracks_by_artist_mood(artist_name: str, mood_category: str, limit: int 
 
 def get_recommendations(mood_category: str, language: str = "mixed",
                         content_type: str = "track", search_query: str = "", genre: str = "", limit: int = 10,
-                        requested_artist: str = None) -> list:
+                        requested_artist: str | None = None) -> list:
     """
     Mood + dil + içerik türüne + (opsiyonel) arama kelimesine ve müzik türüne göre Spotify'dan öneriler getirir.
     """
@@ -327,7 +342,7 @@ def get_recommendations(mood_category: str, language: str = "mixed",
     else:
         # If no requested_artist is explicitly passed, try to deduce it from search_query
         if not requested_artist and search_query:
-            from app.services.mood_service import _extract_artist_fallback
+            from .mood_service import _extract_artist_fallback
             extracted = _extract_artist_fallback(search_query)
             if extracted:
                 requested_artist = extracted
@@ -340,7 +355,6 @@ def get_recommendations(mood_category: str, language: str = "mixed",
                     "sert", "agresif", "rock", "metal", "rap", "güçlü", "kızgın", "chill",
                     "rahat", "akşam", "lofi", "hüzünlü", "duygusal", "ayrılık", "ağlatan", "pop", "classical"
                 }
-                import re
                 if len(lowered_sq) >= 3 and lowered_sq not in common_keywords and re.match(r"^[A-Za-zÇĞİÖŞÜa-zçğıöşü\s\-\.]+$", search_query):
                     requested_artist = search_query
 
@@ -385,6 +399,8 @@ def _build_track_query(mood_category: str, lang: str, search_query: str, genre: 
 
 def _get_recommendations_api(mood_category: str, lang: str, genre: str, limit: int) -> list:
     """Spotify Recommendations API ile duygu durumuna göre şarkı önerir."""
+    sp = _get_spotify_client()
+    
     # 1) Target audio features mapping
     target_features = {}
     if mood_category == "energetic":
@@ -418,59 +434,18 @@ def _get_recommendations_api(mood_category: str, lang: str, genre: str, limit: i
         seed_genres.append(g)
     else:
         # Default seed genre based on mood
-        if mood_category == "energetic":
-            seed_genres.append("dance")
-        elif mood_category == "calm":
-            seed_genres.append("ambient")
-        elif mood_category == "intense":
-            seed_genres.append("metal")
-        elif mood_category == "chill":
-            seed_genres.append("chill")
-        elif mood_category == "melancholic":
-            seed_genres.append("rainy-day")
+        mood_genre_defaults = {
+            "energetic": "dance",
+            "calm": "ambient",
+            "intense": "metal",
+            "chill": "chill",
+            "melancholic": "rainy-day",
+        }
+        seed_genres.append(mood_genre_defaults.get(mood_category, "pop"))
 
-    # 3) Seed Artists (Spotify Artist IDs)
-    seed_artists = []
-    
-    TR_ARTIST_IDS = {
-        "pop": ["5Nn4vJyjT12g1G90bT575y", "611I5uLsp39OFn6297397b", "2F4CIs6n4t67m3EcxJ9vgc"], # Tarkan, Sezen Aksu, Mabel Matiz
-        "rap": ["6vJgN5V79kpxBshP3qgYqg", "07P09qX3sE9S2x0n9A788T"], # Ceza, Ezhel
-        "rock": ["1F4CIs6n4t67m3EcxJ9vgc", "4kL8XgXw4v9Y1Ecz1V4F2E"], # Duman, Mor ve Ötesi
-        "indie": ["34k3y950S6Lz21yC492759", "2F4CIs6n4t67m3EcxJ9vgc"], # Canozan, Mabel Matiz
-        "electronic": ["1382nS212Y9m591YkC9788"], # Mahmut Orhan
-        "classical": ["68z13yC918m2y91X988222"], # Fazıl Say
-        "default": ["5Nn4vJyjT12g1G90bT575y", "1F4CIs6n4t67m3EcxJ9vgc", "611I5uLsp39OFn6297397b"]
-    }
-    
-    GLOBAL_ARTIST_IDS = {
-        "pop": ["06HL4z0CvFAxyCO2zG512g", "66CXWjxzNUsdJxJ2JdwvnR"], # Taylor Swift, Ariana Grande
-        "rap": ["3TVXtAsu4nhprKf2bfUpYY", "26V5477vI006WbDVHns89g"], # Drake, Kanye West
-        "rock": ["711MC97bEsOm6FSzQ56KiJ", "12Chz98pHFMPnRj21gswgm"], # AC/DC, Coldplay
-        "indie": ["418z7mNlP486S4uC9788X2"], # Arctic Monkeys
-        "electronic": ["4q3mJeIpBlmSR284bFWge2"], # Daft Punk
-        "classical": ["2wOqhyv7siWD7i2q1U4PAi"], # Bach
-        "default": ["06HL4z0CvFAxyCO2zG512g", "711MC97bEsOm6FSzQ56KiJ"]
-    }
-
-    if lang == "tr":
-        artist_pool = TR_ARTIST_IDS.get(genre.lower() if genre else "default", TR_ARTIST_IDS["default"])
-        seed_artists = artist_pool[:4]
-    elif lang == "en":
-        artist_pool = GLOBAL_ARTIST_IDS.get(genre.lower() if genre else "default", GLOBAL_ARTIST_IDS["default"])
-        seed_artists = artist_pool[:4]
-    else: # mixed
-        tr_pool = TR_ARTIST_IDS.get(genre.lower() if genre else "default", TR_ARTIST_IDS["default"])
-        global_pool = GLOBAL_ARTIST_IDS.get(genre.lower() if genre else "default", GLOBAL_ARTIST_IDS["default"])
-        seed_artists = [tr_pool[0], global_pool[0]]
-
-    # Limit total seeds to 5 (Spotify constraint)
-    total_seeds = len(seed_genres) + len(seed_artists)
-    if total_seeds > 5:
-        seed_artists = seed_artists[:5 - len(seed_genres)]
-
-    params = {
-        "seed_genres": seed_genres,
-        "seed_artists": seed_artists,
+    # 3) Sadece seed_genres kullan (sanatçı ID'leri yerine — sahte ID'ler 404 hatası veriyordu)
+    params: dict = {
+        "seed_genres": seed_genres[:5],
         "limit": limit,
         **target_features
     }
@@ -482,8 +457,9 @@ def _get_recommendations_api(mood_category: str, lang: str, genre: str, limit: i
 
     results = sp.recommendations(**params)
     tracks = []
-    for track in results.get("tracks", []):
-        tracks.append(_format_track(track))
+    if isinstance(results, dict):
+        for track in results.get("tracks", []):
+            tracks.append(_format_track(track))
     return tracks
 
 
@@ -504,7 +480,8 @@ def _get_tracks(mood_category: str, lang: str, search_query: str, genre: str, li
         except Exception as e:
             error_str = str(e)
             if "404" in error_str or "403" in error_str or "not found" in error_str.lower() or "forbidden" in error_str.lower():
-                SPOTIFY_RECOMMENDATIONS_SUPPORTED = False
+                with _recommendations_lock:
+                    SPOTIFY_RECOMMENDATIONS_SUPPORTED = False
                 logger.warning(
                     "Spotify Recommendations API is restricted/deprecated for this developer account (404/403). "
                     "Bypassing Strateji 0 and falling back to search query recommendations permanently."
@@ -588,7 +565,7 @@ def _search_by_turkish_artists(mood_category: str, genre: str, limit: int, marke
             if market:
                 search_kwargs["market"] = market
 
-            results = sp.search(**search_kwargs)
+            results = _get_spotify_client().search(**search_kwargs)
             for track in results.get("tracks", {}).get("items", []):
                 if track and track.get("id") and not _is_noise_track(track):
                     all_tracks.append(_format_track(track))
@@ -606,7 +583,7 @@ def _search_tracks_direct(query: str, limit: int, market: str | None = None) -> 
     if market:
         search_kwargs["market"] = market
     try:
-        results = sp.search(**search_kwargs)
+        results = _get_spotify_client().search(**search_kwargs)
         tracks = []
         for track in results.get("tracks", {}).get("items", []):
             if track and track.get("id") and not _is_noise_track(track):
@@ -628,7 +605,7 @@ def _get_playlists(mood_category: str, lang: str, search_query: str, genre: str,
         if market:
             search_kwargs["market"] = market
 
-        results = sp.search(**search_kwargs)
+        results = _get_spotify_client().search(**search_kwargs)
         playlists = results.get("playlists", {}).get("items", [])
 
         return [
@@ -664,7 +641,7 @@ def _get_podcasts(mood_category: str, lang: str, search_query: str, genre: str, 
     market = LANG_MARKET.get(lang) or "TR"
 
     try:
-        results = sp.search(q=query, type="show", limit=min(limit, 10), market=market)
+        results = _get_spotify_client().search(q=query, type="show", limit=min(limit, 10), market=market)
         shows = results.get("shows", {}).get("items", [])
 
 
@@ -703,13 +680,3 @@ def _format_track(track: dict) -> dict:
         "type":        "track",
     }
 
-
-def create_playlist(mood_category: str, user_id: str, track_ids: list) -> dict:
-    """Kullanıcı için Spotify'da playlist oluşturur. (TODO)"""
-    playlist_names = {
-        "energetic": "⚡ EmoTune – Energy Boost",
-        "calm":      "🌊 EmoTune – Calm Vibes",
-        "intense":   "🔥 EmoTune – Intense Mode",
-        "chill":     "😌 EmoTune – Chill Session",
-    }
-    return {"message": "Playlist creation coming soon", "mood": mood_category}
