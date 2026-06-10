@@ -1584,19 +1584,23 @@ body {
 
   .sidebar,
   .sidebar.collapsed {
-    width: 100%;
+    width: calc(100% - 2rem);
     min-height: auto;
     position: fixed;
-    bottom: 0;
+    bottom: 1rem;
     top: auto;
-    left: 0;
-    right: 0;
+    left: 1rem;
+    right: 1rem;
     flex-direction: row;
-    padding: 0.5rem;
-    border-right: none;
-    border-top: 1px solid var(--border);
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--border);
+    border-radius: 30px;
+    background: rgba(24, 24, 24, 0.82);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
     z-index: 50;
     white-space: normal;
+    box-shadow: var(--shadow-lg);
   }
 
   .sidebar-header {
@@ -1657,11 +1661,12 @@ body {
   .sidebar.collapsed~.main-content {
     margin-left: 0 !important;
     padding: 1.2rem;
-    padding-bottom: 5.5rem;
+    padding-bottom: 7.5rem;
   }
 
   .mood-tabs {
-    flex-direction: column;
+    flex-direction: row;
+    gap: 0.35rem;
   }
 
   .mood-grid {
@@ -1775,8 +1780,8 @@ body {
   }
 
   .spotify-player-container.active {
-    bottom: 70px;
-    /* Above mobile navbar */
+    bottom: 6.8rem;
+    /* Above mobile floating tab bar */
   }
 }
 

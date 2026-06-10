@@ -40,3 +40,20 @@ postgres_data/
 
 # Logs
 *.log
+
+# Mobile Expo app
+mobile/node_modules/
+mobile/.expo/
+
+# Docker veri tabanı klasörlerini gizle
+postgres_data/
+pgdata/
+
+# Python / Yapay zeka kütüphanelerini gizle
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# Node/Frontend kütüphanelerini gizle
+node_modules/
