@@ -22,38 +22,16 @@ git clone https://github.com/alfe03/emotuneai.git
 cd emotuneai
 ```
 
-### 2. Sanal ortam oluştur
+### 2. Ortam değişkenlerini ayarla
 
 ```bash
-py -3.11 -m venv venv
+cp backend/.env.example backend/.env
 ```
 
-Windows:
-```bash
-venv\Scripts\activate
-```
-
-Mac / Linux:
-```bash
-source venv/bin/activate
-```
-
-### 3. Bağımlılıkları yükle
-
-```bash
-venv\Scripts\python -m pip install -r requirements.txt
-```
-
-### 4. Ortam değişkenlerini ayarla
-
-```bash
-cp .env.example .env
-```
-
-`.env` dosyasını aç ve şu alanları doldur:
+`backend/.env` dosyasını aç ve şu alanları doldur:
 
 ```env
-DATABASE_URL=postgresql://postgres:sifren@localhost:5432/moodtune
+DATABASE_URL=postgresql://postgres:sifren@localhost:5432/emotune
 SPOTIFY_CLIENT_ID=spotify_client_id
 SPOTIFY_CLIENT_SECRET=spotify_client_secret
 SECRET_KEY=gizli-bir-key-yaz
@@ -63,51 +41,68 @@ SPOTIFY_REDIRECT_URI=http://127.0.0.1:8000/api/auth/spotify/callback
 CORS_ORIGINS=http://127.0.0.1:8080,http://localhost:8080
 ```
 
-> **Spotify API anahtarları:** https://developer.spotify.com/dashboard adresine gidip uygulama oluştur, oradan al.
-> **Gemini API Key:** https://ai.google.dev adresinden ücretsiz key oluştur.
-> **Production'da:** CORS_ORIGINS'deki localhost adreslerini kaldır, SPOTIFY_REDIRECT_URI'ni gerçek domain'e güncelle.
-
-### 5. Veritabanını oluştur
-
-PostgreSQL kuruluyken:
-
-```bash
-# psql'e gir
-psql -U postgres
-
-# Veritabanı oluştur
-CREATE DATABASE moodtune;
-\q
-```
-
-Sonra tabloları oluştur:
-
-```bash
-alembic upgrade head
-```
-
-### 6. Uygulamayı Başlat
-
-Proje içerisinde işinizi kolaylaştırmak için iki adet kısayol `.bat` dosyası bulunmaktadır:
-
-1. **Backend İçin (`start.bat`)**: Çift tıklayarak PostgreSQL'i ve FastAPI backend'i başlatabilirsiniz. Sunucu `localhost:8000` üzerinde açılır ve tarayıcınızda otomatik olarak API dokümantasyonu (Swagger) belirir.
-2. **Frontend İçin (`start_frontend.bat`)**: Çift tıklayarak frontend arayüzü için yerel bir HTTP sunucusu başlatabilirsiniz. Çalıştığında `http://localhost:8080` üzerinden EmoTuneAI arayüzünü inceleyebilirsiniz.
-
-> **Manuel başlatmak isterseniz:**
-> Backend: `venv\Scripts\python -m uvicorn main:app --reload` (backend klasöründe)
-> Frontend: `venv\Scripts\python -m http.server 8080` (frontend klasöründe)
+> **Spotify API anahtarları:** https://developer.spotify.com/dashboard
+> **Gemini API Key:** https://ai.google.dev
 
 ---
 
-## Docker ile Çalıştırma (Opsiyonel)
+## Çalıştırma
 
-Docker kuruluysa tek komutla her şeyi başlatabilirsin:
+### Yöntem 1: start.bat (Yerel Geliştirme)
+
+Sanal ortamı bir kere oluştur:
+
+```bash
+py -3.11 -m venv backend\venv
+backend\venv\Scripts\python -m pip install -r backend\requirements.txt
+```
+
+Sonra çift tıkla:
+
+```
+start.bat
+```
+
+Bu script otomatik olarak:
+- PostgreSQL servisini kontrol eder ve gerekirse başlatır (sürümden bağımsız)
+- Frontend'i `http://localhost:8080` üzerinde başlatır
+- Backend'i `http://localhost:8000` üzerinde başlatır
+- Tarayıcıyı otomatik açar
+
+### Yöntem 2: Docker Compose (Tavsiye Edilen)
+
+Docker kuruluysa tek komutla tüm stack ayağa kalkar:
 
 ```bash
 docker-compose up --build
 ```
 
-Bu komut hem API'yi hem de PostgreSQL'i otomatik olarak başlatır.
+Bu komut şunları başlatır:
+- **PostgreSQL** → `localhost:5432`
+- **Backend (FastAPI)** → `http://localhost:8000`
+- **Frontend (nginx)** → `http://localhost:8080`
+
+Durdurmak için:
+
+```bash
+docker-compose down
+```
+
+Veritabanı verileriyle birlikte tamamen temizlemek için:
+
+```bash
+docker-compose down -v
+```
+
+---
+
+## Adresler
+
+| Servis | URL |
+|--------|-----|
+| Frontend | http://localhost:8080 |
+| Backend API | http://localhost:8000 |
+| Swagger Docs | http://localhost:8000/docs |
 
 ---
 
@@ -128,14 +123,17 @@ Bu komut hem API'yi hem de PostgreSQL'i otomatik olarak başlatır.
 
 ```
 emotuneai/
-├── start.bat                # Backend'i başlatma scripti
-├── start_frontend.bat       # Frontend'i başlatma scripti
-├── backend/                 # FastAPI & PostgreSQL Backend Servisi
+├── start.bat               # Tek tıkla başlatma scripti (yerel)
+├── docker-compose.yml      # Tam stack Docker yapılandırması
+├── nginx.conf              # Frontend nginx yapılandırması
+├── backend/                # FastAPI & PostgreSQL Backend
 │   ├── main.py
 │   ├── requirements.txt
+│   ├── Dockerfile
+│   ├── .env.example
 │   └── app/
 │       └── ...
-└── frontend/                # HTML, CSS, JS Saf Web Arayüzü
+└── frontend/               # HTML, CSS, JS Arayüzü
     ├── index.html
     ├── css/
     └── js/
@@ -148,15 +146,13 @@ emotuneai/
 **`tensorflow` kurulamıyor**
 Python versiyonunu kontrol et. TensorFlow yalnızca Python 3.11 ve altını destekler.
 ```bash
-py -3.11 -m pip install -r requirements.txt
+py -3.11 -m pip install -r backend\requirements.txt
 ```
 
 **`ModuleNotFoundError: No module named 'pkg_resources'`**
-Bu hata bazı paketlerin build aşamasında eski `pkg_resources` API'sini kullanmasından kaynaklanır.
-Projede bu yüzden `setuptools<81` sabitlendi. Elle düzeltmek için:
 ```bash
-venv\Scripts\python -m pip install "setuptools<81"
-venv\Scripts\python -m pip install -r requirements.txt
+backend\venv\Scripts\python -m pip install "setuptools<81"
+backend\venv\Scripts\python -m pip install -r backend\requirements.txt
 ```
 
 **`pg_config not found`**
@@ -167,7 +163,4 @@ PostgreSQL servisinin çalıştığından emin ol:
 ```bash
 # Windows
 net start postgresql-x64-16
-
-# Mac
-brew services start postgresql
 ```

@@ -15,12 +15,12 @@ RUN apt-get update && apt-get install -y \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Create appuser for security
-RUN useradd -m appuser
+# Güvenlik için appuser oluştur ve /app'e sahiplik ver
+RUN useradd -m appuser && chown -R appuser:appuser /app
 USER appuser
 
 # Uygulama kodları
-COPY . .
+COPY --chown=appuser:appuser . .
 
 EXPOSE 8000
 

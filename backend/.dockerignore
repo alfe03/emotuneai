@@ -1,0 +1,25 @@
+# Sanal ortam - container içinde pip install ile kurulur
+venv/
+.venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Test & linting
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+
+# Geliştirme ortamı
+.env
+.vscode/
+.idea/
+
+# Geçici dosyalar
+*.log
+.cache
