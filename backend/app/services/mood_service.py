@@ -593,13 +593,63 @@ JSON formatı:
 }
 """
 
+def _video_fallback_with_deepface(video_bytes: bytes) -> dict:
+    """Gemini kullanılamadığında video'dan frame çekip DeepFace ile yüz analizi yapar."""
+    import tempfile
+    import cv2
+    import numpy as np
+
+    logger.info("Video fallback: DeepFace ile yüz analizi deneniyor...")
+    with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as f:
+        f.write(video_bytes)
+        tmp_path = f.name
+
+    try:
+        cap = cv2.VideoCapture(tmp_path)
+        # Videonun ortasındaki frame'i al
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        cap.set(cv2.CAP_PROP_POS_FRAMES, max(0, total_frames // 2))
+        ret, frame = cap.read()
+        cap.release()
+
+        if not ret or frame is None:
+            raise ValueError("Video'dan kare okunamadı.")
+
+        result = DeepFace.analyze(
+            img_path=frame,
+            actions=["emotion"],
+            enforce_detection=False
+        )
+        dominant_emotion = result[0]["dominant_emotion"]
+        confidence = result[0]["emotion"][dominant_emotion]
+        mood_category = EMOTION_TO_MOOD.get(dominant_emotion, "chill")
+        display = EMOTION_DISPLAY.get(dominant_emotion, {"label": dominant_emotion, "emoji": "🎵"})
+
+        logger.info(f"Video fallback başarılı: {dominant_emotion} ({mood_category})")
+        return {
+            "emotion": display["label"],
+            "emoji": display["emoji"],
+            "confidence": round(confidence, 2),
+            "mood_category": mood_category,
+            "input_text": "",
+            "explanation": "⚡ Gemini API şu an kullanılamadığı için sadece yüz ifadesi analizi yapıldı (ses analizi devre dışı)."
+        }
+    finally:
+        if os.path.exists(tmp_path):
+            try:
+                os.unlink(tmp_path)
+            except Exception:
+                pass
+
+
 def analyze_video(video_bytes: bytes) -> dict:
     """
     Kullanıcının kaydettiği 3 saniyelik videoyu Gemini 2.0 Flash ile analiz eder.
     Hem görüntüyü (yüz ifadeleri) hem de sesi (söylenen sözler + ses tonu) kullanarak duygu tespiti yapar.
+    Gemini kullanılamıyorsa DeepFace fallback devreye girer.
     """
     import tempfile
-    
+
     # Geçici dosyaya yaz
     with tempfile.NamedTemporaryFile(suffix=".webm", delete=False) as temp_file:
         temp_file.write(video_bytes)
@@ -608,25 +658,25 @@ def analyze_video(video_bytes: bytes) -> dict:
     video_file = None
     try:
         logger.info(f"Geçici video dosyası oluşturuldu: {temp_video_path}")
-        
+
         # Gemini Files API ile yükle
         video_file = genai.upload_file(path=temp_video_path)
         logger.info(f"Video Gemini'ye yüklendi, isim: {video_file.name}. İşlenmesi bekleniyor...")
-        
+
         # İşlenme durumunu kontrol et
         attempts = 0
         while video_file.state.name == "PROCESSING":
             attempts += 1
-            if attempts > 30: # Max 15 saniye bekle
+            if attempts > 30:  # Max 15 saniye bekle
                 raise ValueError("Video işleme zaman aşımına uğradı.")
             time.sleep(0.5)
             video_file = genai.get_file(video_file.name)
-            
+
         if video_file.state.name == "FAILED":
             raise ValueError("Video işleme başarısız oldu (FAILED).")
-            
+
         logger.info("Video başarıyla işlendi. Analiz başlatılıyor...")
-        
+
         # Analizi yap
         response = None
         last_err = None
@@ -643,19 +693,19 @@ def analyze_video(video_bytes: bytes) -> dict:
             except Exception as e:
                 last_err = e
                 logger.warning(f"Video analizi {model_name} ile başarısız oldu: {e}")
-        
+
         if not response:
             raise ValueError(f"Video analizi tüm modellerle başarısız oldu: {last_err}")
-            
+
         raw_response = response.text.strip()
-        
+
         # JSON'ı ayıkla ve çöz
         json_match = re.search(r'\{(?:[^{}]|\{[^{}]*\})*\}', raw_response)
         if not json_match:
             raise ValueError(f"Gemini geçerli bir JSON dönmedi: {raw_response[:200]}")
-            
+
         result = json.loads(json_match.group())
-        
+
         # Alanları doğrula ve temizle
         emotion = result.get("emotion", "belirsiz")
         emoji = result.get("emoji", "🎵")
@@ -663,11 +713,11 @@ def analyze_video(video_bytes: bytes) -> dict:
         mood_category = result.get("mood_category", "chill")
         input_text = result.get("input_text", "")
         explanation = result.get("explanation", "")
-        
+
         valid_moods = ["energetic", "chill", "melancholic", "intense", "calm"]
         if mood_category not in valid_moods:
             mood_category = "chill"
-            
+
         return {
             "emotion": emotion,
             "emoji": emoji,
@@ -676,10 +726,19 @@ def analyze_video(video_bytes: bytes) -> dict:
             "input_text": input_text,
             "explanation": explanation
         }
-        
+
     except Exception as e:
-        logger.error(f"Video analizi sırasında hata: {str(e)}")
-        raise ValueError(f"Video analizi başarısız oldu: {str(e)}")
+        err_msg = str(e) or repr(e) or type(e).__name__
+        logger.error(f"Video analizi sırasında hata: {err_msg}")
+        # Gemini API key sorunu veya bağlantı hatası → DeepFace fallback
+        is_api_error = any(kw in err_msg.lower() for kw in ["api_key", "expired", "invalid", "401", "403", "400", "quota"])
+        if is_api_error or not err_msg:
+            logger.warning("Gemini API kullanılamıyor, DeepFace fallback deneniyor...")
+            try:
+                return _video_fallback_with_deepface(video_bytes)
+            except Exception as fallback_err:
+                raise ValueError(f"Video analizi başarısız oldu (Gemini ve fallback). Gemini API key'ini yenile: {fallback_err}")
+        raise ValueError(f"Video analizi başarısız oldu: {err_msg}")
         
     finally:
         # Google bulutundaki dosyayı temizle

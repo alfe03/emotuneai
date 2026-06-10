@@ -293,11 +293,17 @@ async function performAnalysis(analysisFn) {
     lastEmotion = data.emotion;
     renderResults(data);
   } catch (err) {
-    resultsSection.innerHTML = `
-      <div class="error-state">
-        <span class="error-icon">⚠️</span>
-        <p>${err.message}</p>
-      </div>`;
+    const errDiv = document.createElement("div");
+    errDiv.className = "error-state";
+    const icon = document.createElement("span");
+    icon.className = "error-icon";
+    icon.textContent = "⚠️";
+    const msg = document.createElement("p");
+    msg.textContent = err.message || "Bilinmeyen bir hata oluştu.";
+    errDiv.appendChild(icon);
+    errDiv.appendChild(msg);
+    resultsSection.innerHTML = "";
+    resultsSection.appendChild(errDiv);
   }
 }
 
