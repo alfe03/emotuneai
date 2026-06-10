@@ -9,6 +9,8 @@
   <link rel="stylesheet" href="css/style.css?v=7">
   <!-- DOMPurify for XSS Protection -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.2/purify.min.js" integrity="sha512-RzIEX0BqEqqAofzR2XbBpsM+mZ7L2R6x/Ocd41gBEwLMFJ8g8x1lKItv9z4D2E555P9q/o89EeyuL3xO4a/ySA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <!-- Chart.js for beautiful analytics charts -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 </head>
 <body>
 
@@ -224,6 +226,68 @@
       <div id="page-history" class="page">
         <h1 class="page-title">Ruh Hali Geçmişi</h1>
         <p class="page-subtitle">Önceki analizlerinizi ve mood değişimlerinizi görün.</p>
+
+        <!-- İstatistik & Analitik Paneli -->
+        <div class="analytics-panel" id="analytics-panel" style="display: none;">
+          <div class="analytics-header">
+            <h2 class="analytics-title" style="font-size: 1.3rem; margin-bottom: 0;">İstatistikler & Analiz</h2>
+            <div class="analytics-timeframe">
+              <select id="analytics-days-select" class="form-input form-input-sm" style="width: auto; height: 32px; padding: 0 0.8rem; background: var(--bg-card); font-size: 0.8rem;">
+                <option value="7">Son 7 Gün</option>
+                <option value="30" selected>Son 30 Gün</option>
+                <option value="90">Son 90 Gün</option>
+              </select>
+            </div>
+          </div>
+          
+          <div class="stats-grid">
+            <div class="stat-card">
+              <div class="stat-icon" style="color: var(--primary);">📊</div>
+              <div class="stat-info">
+                <span class="stat-label">Toplam Analiz</span>
+                <span class="stat-value" id="stat-total">0</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="color: var(--accent-energetic);">👑</div>
+              <div class="stat-info">
+                <span class="stat-label">En Sık Ruh Hali</span>
+                <span class="stat-value" id="stat-common-mood">-</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="color: var(--accent-calm);">🎯</div>
+              <div class="stat-info">
+                <span class="stat-label">Ort. Güven</span>
+                <span class="stat-value" id="stat-avg-confidence">%0</span>
+              </div>
+            </div>
+            <div class="stat-card">
+              <div class="stat-icon" style="color: var(--accent-melancholic);">🔍</div>
+              <div class="stat-info">
+                <span class="stat-label">En Sık Metot</span>
+                <span class="stat-value" id="stat-pref-source">-</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="charts-row">
+            <div class="chart-container-card">
+              <h3 class="chart-title" style="font-size: 1rem; margin-bottom: 1rem; color: var(--text-primary);">Ruh Hali Dağılımı</h3>
+              <div class="chart-wrapper">
+                <canvas id="moodDistributionChart"></canvas>
+              </div>
+            </div>
+            <div class="chart-container-card">
+              <h3 class="chart-title" style="font-size: 1rem; margin-bottom: 1rem; color: var(--text-primary);">Günlük Analiz Sayısı</h3>
+              <div class="chart-wrapper">
+                <canvas id="moodTrendChart"></canvas>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <h2 class="section-title" id="history-list-title" style="margin-top: 2rem; margin-bottom: 1rem;">Analiz Geçmişi Listesi</h2>
         <div id="history-list" class="history-list"></div>
       </div>
 

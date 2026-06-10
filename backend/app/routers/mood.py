@@ -114,7 +114,7 @@ async def analyze_face_endpoint(
         )
         
         _save_mood_and_tracks(
-            db, current_user.id, mood_result["emotion"],
+            db, current_user.id, mood_result["emotion"],  # type: ignore
             mood_result["mood_category"], mood_result["confidence"],
             "face", tracks
         )
@@ -149,7 +149,7 @@ async def analyze_text_endpoint(
         )
 
         _save_mood_and_tracks(
-            db, current_user.id, mood_result["emotion"],
+            db, current_user.id, mood_result["emotion"],  # type: ignore
             mood_result["mood_category"], mood_result["confidence"],
             "text", tracks, input_text=request.text
         )
@@ -181,7 +181,7 @@ async def manual_mood_endpoint(
     )
 
     _save_mood_and_tracks(
-        db, current_user.id, request.mood,
+        db, current_user.id, request.mood,  # type: ignore
         mood_category, 100.0, "manual", tracks
     )
 
@@ -221,7 +221,7 @@ async def analyze_video_endpoint(
         )
         
         _save_mood_and_tracks(
-            db, current_user.id, mood_result["emotion"],
+            db, current_user.id, mood_result["emotion"],  # type: ignore
             mood_result["mood_category"], mood_result["confidence"],
             "video", tracks, input_text=mood_result.get("input_text")
         )

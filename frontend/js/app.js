@@ -15,6 +15,8 @@ let lastMoodCategory = null;          // Son analiz edilen mood (filtre değişi
 let lastEmotion = null;
 let lastSearchQuery = "";             // Sonuçlar içinde arama yapmak için (örn: "Duman")
 let lastRequestedArtist = null;       // Son algılanan veya filtrelenen sanatçı ismi
+let moodDistChartInstance = null;
+let moodTrendChartInstance = null;
 
 
 // ── Init ─────────────────────────────────────────────────────────────────────
@@ -24,6 +26,7 @@ async function initApp() {
   setupMoodActions();
   setupCameraActions();
   setupLanguageFilter();
+  setupAnalyticsTimeframe();
 
   // Check URL for token (from Spotify OAuth redirect)
   const urlParams = new URLSearchParams(window.location.search);
@@ -803,6 +806,9 @@ async function recordVideoAndAnalyze() {
 // ── History ──────────────────────────────────────────────────────────────────
 async function loadHistory() {
   const container = document.getElementById("history-list");
+  const analyticsPanel = document.getElementById("analytics-panel");
+  const listTitle = document.getElementById("history-list-title");
+
   container.innerHTML = `
     <div class="history-list">
       ${Array(4).fill(`
@@ -819,24 +825,42 @@ async function loadHistory() {
     </div>`;
 
   try {
-    const history = await api.getHistory();
+    const history = await api.getHistory(100); // En son 100 kaydı getirelim
     if (!history.length) {
+      if (analyticsPanel) analyticsPanel.style.display = "none";
+      if (listTitle) listTitle.style.display = "none";
+      
       container.innerHTML = `
         <div class="empty-state">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5; margin-bottom: 1rem;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
-          <p>Henüz bir geçmiş yok.</p>
+          <p>Henüz bir geçmiş yok. Ruh halinizi analiz ettikçe geçmişiniz ve analitik grafikleriniz burada görünecektir.</p>
         </div>`;
       return;
     }
 
-    const moodIcons = { energetic: "", calm: "", intense: "", chill: "" };
+    // Paneli ve listeyi görünür kıl
+    if (analyticsPanel) analyticsPanel.style.display = "block";
+    if (listTitle) listTitle.style.display = "block";
+
+    // Seçili gün değerine göre analitikleri yükle
+    const select = document.getElementById("analytics-days-select");
+    const days = select ? parseInt(select.value, 10) : 30;
+    loadAnalytics(days);
+
+    const moodIcons = { 
+      energetic: "⚡", 
+      calm: "🍃", 
+      intense: "🔥", 
+      chill: "🏝️", 
+      melancholic: "🌧️" 
+    };
 
     container.innerHTML = history
       .map(
         (item, i) => `
       <div class="history-card" style="animation-delay: ${i * 0.05}s">
         <div class="history-mood">
-          <span class="history-icon">${moodIcons[item.mood_category] || ""}</span>
+          <span class="history-icon">${moodIcons[item.mood_category] || "🎵"}</span>
           <div>
             <strong>${item.emotion}</strong>
             <span class="history-source">${item.source === 'face' ? 'Fotoğraf' : item.source === 'text' ? 'Metin' : item.source === 'manual' ? 'Manuel' : item.source === 'video' ? 'Sesli Video' : item.source}</span>
@@ -863,10 +887,246 @@ async function deleteHistoryItem(id, btn) {
     await api.deleteHistory(id);
     card.style.transform = "translateX(100%)";
     card.style.opacity = "0";
-    setTimeout(() => card.remove(), 300);
+    setTimeout(() => {
+      card.remove();
+      // Silme sonrası listeyi ve istatistikleri güncelle
+      loadHistory();
+    }, 300);
     showToast("Kayıt silindi.", "success");
   } catch (err) {
     showToast(err.message, "error");
+  }
+}
+
+async function loadAnalytics(days = 30) {
+  try {
+    const data = await api.getHistoryAnalytics(days);
+    
+    const totalCount = data.length;
+    document.getElementById("stat-total").textContent = totalCount;
+    
+    if (totalCount === 0) {
+      document.getElementById("stat-common-mood").textContent = "-";
+      document.getElementById("stat-avg-confidence").textContent = "%0";
+      document.getElementById("stat-pref-source").textContent = "-";
+      
+      if (moodDistChartInstance) { moodDistChartInstance.destroy(); moodDistChartInstance = null; }
+      if (moodTrendChartInstance) { moodTrendChartInstance.destroy(); moodTrendChartInstance = null; }
+      return;
+    }
+    
+    let totalConfidence = 0;
+    const moodCounts = {};
+    const sourceCounts = {};
+    const dailyCounts = {};
+    
+    data.forEach(item => {
+      totalConfidence += item.confidence || 0;
+      moodCounts[item.mood_category] = (moodCounts[item.mood_category] || 0) + 1;
+      sourceCounts[item.source] = (sourceCounts[item.source] || 0) + 1;
+      dailyCounts[item.date] = (dailyCounts[item.date] || 0) + 1;
+    });
+    
+    const avgConfidence = totalConfidence / totalCount;
+    document.getElementById("stat-avg-confidence").textContent = `%${avgConfidence.toFixed(1)}`;
+    
+    const moodLabelsTR = {
+      energetic: "Enerjik",
+      calm: "Sakin",
+      intense: "Yoğun",
+      chill: "Rahat",
+      melancholic: "Hüzünlü"
+    };
+    
+    let mostCommonCategory = "-";
+    let maxMoodCount = 0;
+    Object.keys(moodCounts).forEach(m => {
+      if (moodCounts[m] > maxMoodCount) {
+        maxMoodCount = moodCounts[m];
+        mostCommonCategory = moodLabelsTR[m] || m;
+      }
+    });
+    document.getElementById("stat-common-mood").textContent = mostCommonCategory;
+    
+    const sourceLabelsTR = {
+      text: "Metin",
+      face: "Fotoğraf",
+      video: "Sesli Video",
+      manual: "Manuel"
+    };
+    let prefSource = "-";
+    let maxSourceCount = 0;
+    Object.keys(sourceCounts).forEach(s => {
+      if (sourceCounts[s] > maxSourceCount) {
+        maxSourceCount = sourceCounts[s];
+        prefSource = sourceLabelsTR[s] || s;
+      }
+    });
+    document.getElementById("stat-pref-source").textContent = prefSource;
+    
+    renderAnalyticsCharts(moodCounts, dailyCounts, days);
+    
+  } catch (err) {
+    console.error("Analiz verisi yüklenirken hata:", err);
+  }
+}
+
+function renderAnalyticsCharts(moodCounts, dailyCounts, days) {
+  const moodColors = {
+    energetic: "#e8a838",
+    calm: "#5ba8c8",
+    intense: "#d94040",
+    chill: "#4aba7a",
+    melancholic: "#6b8fd9"
+  };
+  
+  const moodLabelsTR = {
+    energetic: "Enerjik",
+    calm: "Sakin",
+    intense: "Yoğun",
+    chill: "Rahat",
+    melancholic: "Hüzünlü"
+  };
+
+  // 1. Ruh Hali Dağılımı (Doughnut)
+  const distCanvas = document.getElementById("moodDistributionChart");
+  if (distCanvas) {
+    if (moodDistChartInstance) {
+      moodDistChartInstance.destroy();
+    }
+    
+    const categories = Object.keys(moodCounts);
+    const counts = Object.values(moodCounts);
+    const bgColors = categories.map(cat => moodColors[cat] || "#1db954");
+    const labels = categories.map(cat => moodLabelsTR[cat] || cat);
+    
+    moodDistChartInstance = new Chart(distCanvas, {
+      type: "doughnut",
+      data: {
+        labels: labels,
+        datasets: [{
+          data: counts,
+          backgroundColor: bgColors,
+          borderWidth: 1,
+          borderColor: "rgba(255, 255, 255, 0.08)"
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: {
+            position: "bottom",
+            labels: {
+              color: "#e8e8e8",
+              font: {
+                family: "Inter",
+                size: 11
+              },
+              padding: 15
+            }
+          },
+          tooltip: {
+            callbacks: {
+              label: function(context) {
+                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                const val = context.raw;
+                const percentage = ((val / total) * 100).toFixed(1);
+                return ` ${context.label}: ${val} adet (%${percentage})`;
+              }
+            }
+          }
+        },
+        cutout: "60%"
+      }
+    });
+  }
+
+  // 2. Günlük Trend (Bar)
+  const trendCanvas = document.getElementById("moodTrendChart");
+  if (trendCanvas) {
+    if (moodTrendChartInstance) {
+      moodTrendChartInstance.destroy();
+    }
+    
+    let labels = [];
+    let dataPoints = [];
+    
+    // Son X günden geriye doğru tarihleri üretelim
+    const end = new Date();
+    const start = new Date();
+    start.setDate(end.getDate() - days + 1);
+    
+    const current = new Date(start);
+    while (current <= end) {
+      const dateStr = current.toISOString().split("T")[0];
+      labels.push(current.toLocaleDateString("tr-TR", { month: "short", day: "numeric" }));
+      dataPoints.push(dailyCounts[dateStr] || 0);
+      current.setDate(current.getDate() + 1);
+    }
+    
+    moodTrendChartInstance = new Chart(trendCanvas, {
+      type: "bar",
+      data: {
+        labels: labels,
+        datasets: [{
+          label: "Analiz Sayısı",
+          data: dataPoints,
+          backgroundColor: "rgba(29, 185, 84, 0.45)",
+          borderColor: "#1db954",
+          borderWidth: 1.5,
+          borderRadius: 4,
+          hoverBackgroundColor: "#1db954"
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        scales: {
+          x: {
+            grid: {
+              display: false
+            },
+            ticks: {
+              color: "#a0a0a0",
+              font: {
+                family: "Inter",
+                size: 9
+              }
+            }
+          },
+          y: {
+            beginAtZero: true,
+            grid: {
+              color: "rgba(255, 255, 255, 0.05)"
+            },
+            ticks: {
+              color: "#a0a0a0",
+              stepSize: 1,
+              font: {
+                family: "Inter",
+                size: 10
+              }
+            }
+          }
+        },
+        plugins: {
+          legend: {
+            display: false
+          }
+        }
+      }
+    });
+  }
+}
+
+function setupAnalyticsTimeframe() {
+  const select = document.getElementById("analytics-days-select");
+  if (select) {
+    select.addEventListener("change", (e) => {
+      const days = parseInt(e.target.value, 10);
+      loadAnalytics(days);
+    });
   }
 }
 

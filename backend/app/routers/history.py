@@ -53,6 +53,44 @@ def get_mood_graph(
     ]
 
 
+@router.get("/analytics")
+def get_mood_analytics(
+    days: int = 30,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """Kullanıcının son X gün içindeki mood analitik verilerini getirir."""
+    from datetime import datetime, timedelta, timezone
+    since = datetime.now(timezone.utc) - timedelta(days=days)
+
+    results = (
+        db.query(
+            MoodHistory.mood_category,
+            MoodHistory.emotion,
+            MoodHistory.source,
+            MoodHistory.confidence,
+            MoodHistory.created_at
+        )
+        .filter(
+            MoodHistory.user_id == current_user.id,
+            MoodHistory.created_at >= since
+        )
+        .order_by(MoodHistory.created_at.asc())
+        .all()
+    )
+
+    return [
+        {
+            "mood_category": r.mood_category,
+            "emotion": r.emotion,
+            "source": r.source,
+            "confidence": r.confidence,
+            "date": r.created_at.strftime("%Y-%m-%d")
+        }
+        for r in results
+    ]
+
+
 @router.delete("/{history_id}")
 def delete_history(
     history_id: int,

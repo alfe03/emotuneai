@@ -277,56 +277,61 @@ def _extract_artist_fallback(text: str) -> str | None:
                 return f"{words[0]} {words[1]}"
             return words[0]
         
-    # 2. Türkçe kesme işaretli ek kalıpları (örn: Tarkan'dan, Duman'ın, Sezen Aksu'nun)
-    apostrophe_match = re.search(r"\b([A-ZÇĞİÖŞÜa-zçğıöşü\s]+)['’](?:dan|den|tan|ten|ın|in|un|ün|nın|nin|nun|nün)\b", text)
-    if apostrophe_match:
-        candidate = apostrophe_match.group(1).strip()
-        words = candidate.split()
-        if words:
-            if len(words) >= 2 and words[-2][0].isupper():
-                return f"{words[-2]} {words[-1]}"
-            return words[-1]
-
-    # 3. Türkçe ek kalıpları (kesme işareti olmadan, örn: Tarkandan, Dumandan, cartiden)
-    # Yaygın kelimeleri hariç tutuyoruz
-    suffix_match = re.search(r"\b([A-ZÇĞİÖŞÜa-zçğıöşü]+)(?:dan|den|tan|ten)\b", text)
-    if suffix_match:
-        candidate = suffix_match.group(1).strip()
-        excluded = {
-            "ben", "sen", "neden", "zaten", "aniden", "birden", "hemen", "lütfen", "içten", "bazen", 
-            "dünden", "yoldan", "oradan", "buradan", "şuradan", "ordan", "burdan", "şurdan", "ondan",
-            "bundan", "şundan", "candan", "tenden", "günden"
+    # 2 & 3. Türkçe ek kalıpları (kesme işaretli, kesme işaretsiz, boşluklu/boşluksuz)
+    # Tek kelimelik adayları eşleştirir ve ardından önceki kelimeyle birleştirilebilir olup olmadığını kontrol eder.
+    for m in re.finditer(r"\b([A-ZÇĞİÖŞÜa-zçğıöşü]+)\s*['’]?\s*(?:dan|den|tan|ten|ın|in|un|ün|nın|nin|nun|nün)\b", text, re.IGNORECASE):
+        candidate = m.group(1).strip()
+        full_match = m.group(0).lower().strip()
+        
+        excluded_full = {
+            "sakin", "gergin", "üzgün", "yorgun", "kızgın", "kesin", "serin", "derin", "zaten", "hemen", 
+            "aniden", "birden", "lütfen", "bazen", "dünden", "yoldan", "candan", "tenden", "günden"
         }
-        if candidate.lower() not in excluded and len(candidate) > 2:
+        if full_match in excluded_full:
+            continue
+            
+        excluded_candidates = {
+            "ben", "sen", "o", "biz", "siz", "onlar", "neden", "oradan", "buradan", "şuradan", "ordan", 
+            "burdan", "şurdan", "ondan", "bundan", "şundan", "bir", "ve", "veya", "ama", "fakat",
+            "şarkı", "sarkı", "müzik", "muzik", "albüm", "album", "ses", "grup", "sanatçı", "sanatcı", 
+            "şarkıcı", "sarkıcı", "sarkilar", "şarkılar", "sarkiları", "şarkıları",
+            "istiyorum", "isterim", "olsun", "çal", "çalsın", "calsın", "gelsin", "dinle", "dinlemek", "öner", "oner", "istediğim", "istedigim"
+        }
+        if candidate.lower() not in excluded_candidates and len(candidate) > 2:
+            # Önündeki kelimeyi kontrol et (örn: "sezen aksu dan" -> "sezen" + "aksu")
             pos = text.find(candidate)
             before = text[:pos].strip()
             before_words = before.split()
             if before_words:
-                last_before = before_words[-1].strip(".,?!\"'()")
-                stop_before = {
-                    "ve", "veya", "bir", "bana", "sana", "o", "bu", "şu", "ile", "de", "da", "ki", 
-                    "en", "çok", "daha", "ben", "sen", "biz", "siz", "onlar", "ama", "fakat", "lakin"
-                }
-                if last_before.lower() not in stop_before and len(last_before) > 2:
-                    return f"{before_words[-1]} {candidate}"
+                last_word_raw = before_words[-1]
+                # Noktalama işaretiyle bitiyorsa yeni cümledir, birleştirme!
+                if not last_word_raw.endswith((".", "!", "?", ":", ";")):
+                    last_before = last_word_raw.strip(".,?!\"'()")
+                    if last_before.lower() not in excluded_candidates and len(last_before) > 2:
+                        return f"{last_before} {candidate}"
             return candidate
 
     # 4. Yönelim/istek kelimelerinden hemen önceki kelimeleri kontrol et
     # Örn: "sezen aksu dinlemek", "duman çal"
-    for verb in ["dinlemek", "dinle", "çal", "söyle", "öner", "play", "listen"]:
+    for verb in ["dinlemek", "dinle", "çal", "cal", "söyle", "soyle", "öner", "oner", "play", "listen", "olsun", "çalsın", "calsın", "calsin", "gelsin"]:
         pos = text_lower.find(verb)
         if pos != -1:
             before = text[:pos].strip()
             words = before.split()
             if words:
-                last_word = words[-1]
                 stopwords = {
                     "bir", "biraz", "ve", "veya", "da", "de", "ki", "ben", "sen", "bana", "bi", "daha",
-                    "şöyle", "böyle", "kendi", "güzel", "hareketli", "sakin", "yavaş", "hızlı", "hüzünlü"
+                    "şöyle", "böyle", "kendi", "güzel", "hareketli", "sakin", "yavaş", "hızlı", "hüzünlü",
+                    "şarkı", "sarkı", "müzik", "muzik", "albüm", "album", "ses", "grup", "sanatçı", "sanatcı", 
+                    "şarkıcı", "sarkıcı", "dan", "den", "tan", "ten", "sarkilar", "şarkılar", "sarkiları", "şarkıları",
+                    "istiyorum", "istiyorum.", "olsun", "çalsın", "gelsin"
                 }
+                last_word = words[-1].strip(".,?!\"'()")
                 if last_word.lower() not in stopwords and len(last_word) > 2:
-                    if len(words) >= 2 and words[-2][0].isupper() and words[-1][0].isupper():
-                        return f"{words[-2]} {words[-1]}"
+                    if len(words) >= 2:
+                        second_last = words[-2].strip(".,?!\"'()")
+                        if second_last.lower() not in stopwords and len(second_last) > 2:
+                            return f"{second_last} {last_word}"
                     return last_word
                     
     return None
@@ -468,6 +473,11 @@ def analyze_text(text: str) -> dict:
     Gemini 2.0 kota hatası verirse Gemini 1.5 modelini dener.
     Tüm denemeler başarısız olursa anahtar kelime tabanlı fallback kullanır.
     """
+    # Hızlı kontrol: Eğer geçerli bir API anahtarı formatı yoksa doğrudan yedek analize geç
+    if not settings.GEMINI_API_KEY or not (settings.GEMINI_API_KEY.startswith("AIza") or settings.GEMINI_API_KEY.startswith("AQ")):
+        logger.warning("Geçersiz veya eksik Gemini API Anahtarı. Doğrudan yedek analize geçiliyor.")
+        return _fallback_analyze_text(text)
+
     last_error = None
     models_to_try = [
         ("gemini-3.5-flash", gemini_model_35),
@@ -537,6 +547,10 @@ def analyze_text(text: str) -> dict:
                 else:
                     # Diğer hatalar (örn. 401 veya beklenmedik hatalar) için sonraki modele geç
                     logger.error(f"Gemini API hatası ({model_name}): {error_str}")
+                    # API Key geçersizliği veya yetkilendirme hatası varsa hiç deneme yapma, doğrudan fallback'e geç
+                    if "API_KEY_INVALID" in error_str or "invalid api key" in error_str.lower() or "401" in error_str:
+                        logger.error("Gemini API anahtarı geçersiz. Doğrudan yedek analize geçiliyor.")
+                        return _fallback_analyze_text(text)
                     break
 
     # Tüm denemeler başarısız → fallback kullan
@@ -648,6 +662,11 @@ def analyze_video(video_bytes: bytes) -> dict:
     Hem görüntüyü (yüz ifadeleri) hem de sesi (söylenen sözler + ses tonu) kullanarak duygu tespiti yapar.
     Gemini kullanılamıyorsa DeepFace fallback devreye girer.
     """
+    # Hızlı kontrol: Eğer geçerli bir API anahtarı formatı yoksa doğrudan video fallback'ine geç
+    if not settings.GEMINI_API_KEY or not (settings.GEMINI_API_KEY.startswith("AIza") or settings.GEMINI_API_KEY.startswith("AQ")):
+        logger.warning("Geçersiz veya eksik Gemini API Anahtarı. Doğrudan video yüz analizine geçiliyor.")
+        return _video_fallback_with_deepface(video_bytes)
+
     import tempfile
 
     # Geçici dosyaya yaz
@@ -692,6 +711,11 @@ def analyze_video(video_bytes: bytes) -> dict:
                 break
             except Exception as e:
                 last_err = e
+                error_str = str(e)
+                # API Key geçersizliği veya yetkilendirme hatası varsa hiç deneme yapma, doğrudan fallback'e geç
+                if "API_KEY_INVALID" in error_str or "invalid api key" in error_str.lower() or "401" in error_str:
+                    logger.error("Gemini API anahtarı geçersiz. Doğrudan video yüz analizine geçiliyor.")
+                    return _video_fallback_with_deepface(video_bytes)
                 logger.warning(f"Video analizi {model_name} ile başarısız oldu: {e}")
 
         if not response:

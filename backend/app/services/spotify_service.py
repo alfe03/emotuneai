@@ -279,7 +279,7 @@ def _get_tracks_by_artist_mood(artist_name: str, mood_category: str, limit: int 
         try:
             query = f'{artist_name} {kw}'
             search_results = sp.search(q=query, type='track', limit=search_limit)
-            items = search_results.get("tracks", {}).get("items", [])
+            items = search_results.get("tracks", {}).get("items", []) if search_results else []
             for track in items:
                 if track and track.get("id"):
                     # Şarkının gerçekten o sanatçıya ait olup olmadığını kontrol et (benzer isimli başka bir sanatçı çıkmasın)
@@ -297,11 +297,11 @@ def _get_tracks_by_artist_mood(artist_name: str, mood_category: str, limit: int 
         try:
             query = f'artist:"{artist_name}"'
             search_results = sp.search(q=query, type='track', limit=10)
-            items = search_results.get("tracks", {}).get("items", [])
+            items = search_results.get("tracks", {}).get("items", []) if search_results else []
             if not items:
                 # Tırnaksız dene
                 search_results = sp.search(q=artist_name, type='track', limit=10)
-                items = search_results.get("tracks", {}).get("items", [])
+                items = search_results.get("tracks", {}).get("items", []) if search_results else []
                 
             for track in items:
                 if len(tracks) >= search_limit:
@@ -566,7 +566,8 @@ def _search_by_turkish_artists(mood_category: str, genre: str, limit: int, marke
                 search_kwargs["market"] = market
 
             results = _get_spotify_client().search(**search_kwargs)
-            for track in results.get("tracks", {}).get("items", []):
+            items = results.get("tracks", {}).get("items", []) if results else []
+            for track in items:
                 if track and track.get("id") and not _is_noise_track(track):
                     all_tracks.append(_format_track(track))
 
@@ -585,7 +586,8 @@ def _search_tracks_direct(query: str, limit: int, market: str | None = None) -> 
     try:
         results = _get_spotify_client().search(**search_kwargs)
         tracks = []
-        for track in results.get("tracks", {}).get("items", []):
+        items = results.get("tracks", {}).get("items", []) if results else []
+        for track in items:
             if track and track.get("id") and not _is_noise_track(track):
                 tracks.append(_format_track(track))
         return tracks
@@ -606,7 +608,7 @@ def _get_playlists(mood_category: str, lang: str, search_query: str, genre: str,
             search_kwargs["market"] = market
 
         results = _get_spotify_client().search(**search_kwargs)
-        playlists = results.get("playlists", {}).get("items", [])
+        playlists = results.get("playlists", {}).get("items", []) if results else []
 
         return [
             {
@@ -642,7 +644,7 @@ def _get_podcasts(mood_category: str, lang: str, search_query: str, genre: str, 
 
     try:
         results = _get_spotify_client().search(q=query, type="show", limit=min(limit, 10), market=market)
-        shows = results.get("shows", {}).get("items", [])
+        shows = results.get("shows", {}).get("items", []) if results else []
 
 
         return [

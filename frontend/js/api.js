@@ -132,6 +132,10 @@ class EmoTuneAPI {
     return this.request(`/api/history/graph?days=${days}`);
   }
 
+  async getHistoryAnalytics(days = 30) {
+    return this.request(`/api/history/analytics?days=${days}`);
+  }
+
   async deleteHistory(id) {
     return this.request(`/api/history/${id}`, { method: "DELETE" });
   }
