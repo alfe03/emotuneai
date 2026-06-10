@@ -167,7 +167,7 @@ function setupAuthForms() {
   // Spotify Login redirects
   const spotifyLoginFn = () => {
     const redirect = encodeURIComponent(window.location.origin + "/index.html");
-    window.location.href = `http://127.0.0.1:8000/api/auth/spotify/login?redirect=${redirect}`;
+    window.location.href = `${API_BASE}/api/auth/spotify/login?redirect=${redirect}`;
   };
   const spotifyBtn = document.getElementById("btn-spotify-login");
   if(spotifyBtn) spotifyBtn.addEventListener("click", spotifyLoginFn);
@@ -680,8 +680,16 @@ async function startCamera() {
     const recordBtn = document.getElementById("btn-record-video");
     if (recordBtn) recordBtn.style.display = "inline-flex";
   } catch (err) {
-    console.error("Camera access failed:", err);
-    showToast("Kamera veya mikrofon erişimi reddedildi.", "error");
+    console.error("Camera access failed:", err.name, err.message);
+    if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
+      showToast("Kamera/mikrofon izni reddedildi. Tarayıcı adres çubuğundaki kilit ikonuna tıklayıp izin ver.", "error");
+    } else if (err.name === "NotFoundError" || err.name === "DevicesNotFoundError") {
+      showToast("Kamera veya mikrofon bulunamadı. Cihazınızın bağlı olduğundan emin olun.", "error");
+    } else if (err.name === "NotReadableError") {
+      showToast("Kamera başka bir uygulama tarafından kullanılıyor. Diğer uygulamaları kapatıp tekrar deneyin.", "error");
+    } else {
+      showToast("Kamera/mikrofon erişim hatası: " + err.message, "error");
+    }
   }
 }
 

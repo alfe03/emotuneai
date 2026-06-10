@@ -1,6 +1,10 @@
 // ─── EmoTuneAI API Layer ─────────────────────────────────────────────────────
-const isLocal = window.location.hostname === "127.0.0.1" || window.location.hostname === "localhost";
-const API_BASE = isLocal ? "http://127.0.0.1:8000" : "https://api.emotuneai.com"; // Üretime alırken burası güncellenecek
+// Docker'da nginx üzerinden proxy, local'de direkt backend
+const API_BASE = window.location.port === "8080"
+  ? ""   // nginx /api/* → backend (same origin, no CORS)
+  : window.location.port === "8000"
+    ? ""  // direkt backend
+    : "http://127.0.0.1:8000"; // fallback
 
 class EmoTuneAPI {
   constructor() {
