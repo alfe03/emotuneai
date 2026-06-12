@@ -1,13 +1,14 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
-from app.services.mood_service import analyze_face, analyze_text, analyze_video
+from app.services.mood_service import analyze_face, analyze_text, analyze_audio
 from app.services.spotify_service import get_recommendations
 from app.core.database import get_db
 from sqlalchemy.orm import Session
 from app.core.dependencies import get_current_user
 from app.models.models import User, MoodHistory, RecommendedTrack
 import logging
+import concurrent.futures
 
 logger = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ router = APIRouter()
 def _save_mood_and_tracks(
     db: Session, user_id: int, emotion: str, mood_category: str,
     confidence: float, source: str, tracks: list, input_text: str | None = None
-) -> None:
+) -> int | None:
     """Mood geçmişi ve önerilen şarkıları veritabanına kaydeder."""
     try:
         db_history = MoodHistory(
@@ -45,9 +46,11 @@ def _save_mood_and_tracks(
             )
             db.add(db_track)
         db.commit()
+        return db_history.id
     except Exception as e:
         db.rollback()
         logger.error(f"DB kaydetme hatası ({source}): {e}")
+        return None
 
 
 # ── Request / Response Modelleri ──────────────────────────────────────────────
@@ -73,16 +76,13 @@ class ManualMoodRequest(BaseModel):
     search_query: Optional[str] = ""
     genre: Optional[str] = ""
     requested_artist: Optional[str] = None
+    no_save: bool = False            # True ise DB'ye kayıt yapılmaz (yenile/filtre değişimi için)
 
 
-class VideoAnalysisRequest(BaseModel):
-    video_base64: str                # Base64 WebM video
-    language: str = "mixed"
-    content_type: str = "track"
-    search_query: Optional[str] = ""
-    genre: Optional[str] = ""
+
 
 class MoodResponse(BaseModel):
+    id: Optional[int] = None
     emotion: str
     confidence: float
     mood_category: str
@@ -97,7 +97,7 @@ class MoodResponse(BaseModel):
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 @router.post("/analyze/face", response_model=MoodResponse)
-async def analyze_face_endpoint(
+def analyze_face_endpoint(
     request: FaceAnalysisRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -113,13 +113,13 @@ async def analyze_face_endpoint(
             genre=request.genre or ""
         )
         
-        _save_mood_and_tracks(
+        history_id = _save_mood_and_tracks(
             db, current_user.id, mood_result["emotion"],  # type: ignore
             mood_result["mood_category"], mood_result["confidence"],
             "face", tracks
         )
 
-        return {**mood_result, "recommendations": tracks, "source": "face"}
+        return {**mood_result, "recommendations": tracks, "source": "face", "id": history_id}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -128,7 +128,7 @@ async def analyze_face_endpoint(
 
 
 @router.post("/analyze/text", response_model=MoodResponse)
-async def analyze_text_endpoint(
+def analyze_text_endpoint(
     request: TextAnalysisRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -137,24 +137,56 @@ async def analyze_text_endpoint(
     if len(request.text.strip()) < 3:
         raise HTTPException(status_code=400, detail="Lütfen daha uzun bir metin girin.")
     try:
-        mood_result = analyze_text(request.text)
-        requested_artist = mood_result.get("requested_artist")
-        tracks = get_recommendations(
-            mood_result["mood_category"],
-            language=request.language,
-            content_type=request.content_type,
-            search_query=request.search_query or "",
-            genre=request.genre or "",
-            requested_artist=requested_artist
-        )
+        # ── Gemini analizi ve Spotify aramasını PARALEL başlat ──────────────────
+        # Spotify için önce hızlı bir keyword tahmini yapıyoruz (Gemini bitmeden)
+        from app.services.mood_service import _extract_artist_fallback, _fallback_analyze_text, EMOTION_TO_MOOD
 
-        _save_mood_and_tracks(
+        # Hızlı ön-tahmin: keyword tabanlı mood (Gemini beklenmeden Spotify'a başlamak için)
+        quick_mood = _fallback_analyze_text(request.text)
+        quick_mood_category = quick_mood.get("mood_category", "chill")
+        quick_artist = _extract_artist_fallback(request.text)
+
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+            # Gemini analizi (daha derin)
+            gemini_future = executor.submit(analyze_text, request.text)
+            # Spotify araması hemen başlasın (quick_mood ile)
+            spotify_future = executor.submit(
+                get_recommendations,
+                quick_mood_category,
+                request.language,
+                request.content_type,
+                request.search_query or "",
+                request.genre or "",
+                10,
+                quick_artist
+            )
+
+            mood_result = gemini_future.result()   # Gemini sonucu
+            requested_artist = mood_result.get("requested_artist") or quick_artist
+
+            # Gemini farklı bir mood kategorisi verdiyse Spotify'ı tekrar çek,
+            # aynıysa zaten hazır olan sonucu kullan
+            if mood_result["mood_category"] != quick_mood_category or (
+                requested_artist and requested_artist != quick_artist
+            ):
+                tracks = get_recommendations(
+                    mood_result["mood_category"],
+                    language=request.language,
+                    content_type=request.content_type,
+                    search_query=request.search_query or "",
+                    genre=request.genre or "",
+                    requested_artist=requested_artist
+                )
+            else:
+                tracks = spotify_future.result()
+
+        history_id = _save_mood_and_tracks(
             db, current_user.id, mood_result["emotion"],  # type: ignore
             mood_result["mood_category"], mood_result["confidence"],
             "text", tracks, input_text=request.text
         )
 
-        return {**mood_result, "recommendations": tracks, "source": "text"}
+        return {**mood_result, "recommendations": tracks, "source": "text", "id": history_id}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
@@ -163,7 +195,7 @@ async def analyze_text_endpoint(
 
 
 @router.post("/manual", response_model=MoodResponse)
-async def manual_mood_endpoint(
+def manual_mood_endpoint(
     request: ManualMoodRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
@@ -180,12 +212,16 @@ async def manual_mood_endpoint(
         requested_artist=request.requested_artist
     )
 
-    _save_mood_and_tracks(
-        db, current_user.id, request.mood,  # type: ignore
-        mood_category, 100.0, "manual", tracks
-    )
+    # Yenile/filtre değişiminde DB'ye kaydetme (no_save=True ise atla)
+    history_id = None
+    if not request.no_save:
+        history_id = _save_mood_and_tracks(
+            db, current_user.id, request.mood,  # type: ignore
+            mood_category, 100.0, "manual", tracks
+        )
 
     return {
+        "id": history_id,
         "emotion": request.mood,
         "confidence": 100.0,
         "mood_category": mood_category,
@@ -195,21 +231,30 @@ async def manual_mood_endpoint(
     }
 
 
-@router.post("/analyze/video", response_model=MoodResponse)
-async def analyze_video_endpoint(
-    request: VideoAnalysisRequest,
+
+
+
+class AudioAnalysisRequest(BaseModel):
+    audio_base64: str                # Base64 WebM/WAV ses verisi
+    language: str = "mixed"
+    content_type: str = "track"
+    search_query: Optional[str] = ""
+    genre: Optional[str] = ""
+
+
+@router.post("/analyze/audio", response_model=MoodResponse)
+def analyze_audio_endpoint(
+    request: AudioAnalysisRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
-    """Kullanıcının kaydettiği videoyu analiz eder ve müzik önerir."""
+    """Kullanıcının kaydettiği ses kaydını analiz eder ve müzik önerir."""
     try:
         import base64
-        video_bytes = base64.b64decode(request.video_base64)
+        audio_bytes = base64.b64decode(request.audio_base64)
         
-        mood_result = analyze_video(video_bytes)
-        from app.services.mood_service import _extract_artist_fallback
-        requested_artist = _extract_artist_fallback(mood_result.get("input_text", ""))
-        mood_result["requested_artist"] = requested_artist
+        mood_result = analyze_audio(audio_bytes)
+        requested_artist = mood_result.get("requested_artist")
         
         tracks = get_recommendations(
             mood_result["mood_category"],
@@ -220,16 +265,16 @@ async def analyze_video_endpoint(
             requested_artist=requested_artist
         )
         
-        _save_mood_and_tracks(
+        history_id = _save_mood_and_tracks(
             db, current_user.id, mood_result["emotion"],  # type: ignore
             mood_result["mood_category"], mood_result["confidence"],
-            "video", tracks, input_text=mood_result.get("input_text")
+            "voice", tracks, input_text=mood_result.get("input_text")
         )
         
-        return {**mood_result, "recommendations": tracks, "source": "video"}
+        return {**mood_result, "recommendations": tracks, "source": "voice", "id": history_id}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     except Exception as e:
-        logger.error(f"Video analizi endpoint hatası: {e}")
-        raise HTTPException(status_code=500, detail="Video analizi sırasında beklenmeyen bir hata oluştu.")
+        logger.error(f"Ses analizi endpoint hatası: {e}")
+        raise HTTPException(status_code=500, detail="Ses analizi sırasında beklenmeyen bir hata oluştu.")
 

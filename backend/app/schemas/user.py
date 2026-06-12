@@ -1,4 +1,5 @@
 from pydantic import BaseModel, EmailStr
+from typing import Optional
 
 class RegisterRequest(BaseModel):
     email: EmailStr
@@ -17,6 +18,11 @@ class UserResponse(BaseModel):
     id: int
     email: EmailStr
     username: str
+    spotify_connected: bool = False
 
     class Config:
         from_attributes = True
+
+class ChangePasswordRequest(BaseModel):
+    current_password: Optional[str] = None
+    new_password: str

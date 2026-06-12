@@ -11,9 +11,16 @@ class User(Base):
     email      = Column(String, unique=True, index=True, nullable=False)
     username   = Column(String, unique=True, index=True, nullable=False)
     hashed_password = Column(String, nullable=False)
+    spotify_access_token = Column(String, nullable=True)
+    spotify_refresh_token = Column(String, nullable=True)
+    spotify_token_expires_at = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
     mood_history = relationship("MoodHistory", back_populates="user", cascade="all, delete-orphan")
+
+    @property
+    def spotify_connected(self) -> bool:
+        return self.spotify_refresh_token is not None
 
 
 class MoodHistory(Base):

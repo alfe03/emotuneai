@@ -8,6 +8,7 @@ import json
 import logging
 import re
 import time
+import concurrent.futures
 
 logging.getLogger("google.generativeai").setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
@@ -16,14 +17,75 @@ logger = logging.getLogger(__name__)
 # ── Gemini AI Kurulumu ────────────────────────────────────────────────────────
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
-gemini_model_35 = genai.GenerativeModel("gemini-3.5-flash")
 gemini_model_20 = genai.GenerativeModel("gemini-2.0-flash")
 gemini_model_25 = genai.GenerativeModel("gemini-2.5-flash")
-gemini_model_15 = genai.GenerativeModel("gemini-flash-latest")
+gemini_model_25_lite = genai.GenerativeModel("gemini-2.5-flash-lite")
+gemini_model_15 = genai.GenerativeModel("gemini-1.5-flash")
+
+# Öncelik sırası: 2.0-flash → 2.5-flash → 2.5-flash-lite → 1.5-flash
+GEMINI_MODELS = [gemini_model_20, gemini_model_25, gemini_model_25_lite, gemini_model_15]
 
 # Retry ayarları
-MAX_RETRIES = 3
-INITIAL_RETRY_DELAY = 5  # saniye
+MAX_RETRIES = 1
+INITIAL_RETRY_DELAY = 1  # saniye
+GEMINI_TIMEOUT = 8  # saniye — tek bir Gemini çağrısı için max bekleme
+
+# ── Gemini devre dışı flag'i ──────────────────────────────────────────────────
+# Sadece 401/403 (geçersiz key) için True olur.
+# 429 quota/rate-limit geçici hatadır — kalıcı disable YAPILMAZ, her istek tekrar dener.
+_GEMINI_DISABLED = False
+_GEMINI_DISABLE_REASON = ""
+
+
+def _disable_gemini(reason: str):
+    """Gemini'yi KALICI olarak devre dışı bırakır — sadece geçersiz API key için çağrılmalı."""
+    global _GEMINI_DISABLED, _GEMINI_DISABLE_REASON
+    _GEMINI_DISABLED = True
+    _GEMINI_DISABLE_REASON = reason
+    logger.warning(f"Gemini kalıcı devre dışı (geçersiz key): {reason}")
+
+
+def _is_fatal_gemini_error(error_str: str) -> bool:
+    """True → kalıcı hata (key geçersiz), Gemini'yi kapat.
+       False → geçici hata (quota/rate-limit/network), sadece bu isteği fallback'e düşür."""
+    fatal_keywords = ["api_key_invalid", "invalid api key", "invalid_api_key",
+                      " 401 ", "401,", "401\n", "403 ", "403,", "403\n",
+                      "permission_denied", "unauthenticated"]
+    return any(kw in error_str for kw in fatal_keywords)
+
+
+def _call_gemini_with_timeout(model, prompt, timeout=None, generation_config=None):
+    """Gemini API'yi strict timeout ile çağırır. Yanıt gelmezse TimeoutError fırlatır."""
+    if timeout is None:
+        timeout = GEMINI_TIMEOUT
+    with concurrent.futures.ThreadPoolExecutor(max_workers=1) as executor:
+        future = executor.submit(model.generate_content, prompt, generation_config=generation_config)
+        return future.result(timeout=timeout)
+
+
+def _call_gemini_with_fallback(prompt, timeout=None, generation_config=None):
+    """
+    GEMINI_MODELS listesindeki modelleri sırayla dener.
+    429 (quota) alırsa bir sonraki modele geçer.
+    Fatal hata (401/403) veya tüm modeller tükenirse exception fırlatır.
+    """
+    last_exc = None
+    for model in GEMINI_MODELS:
+        try:
+            return _call_gemini_with_timeout(model, prompt, timeout=timeout, generation_config=generation_config)
+        except (TimeoutError, concurrent.futures.TimeoutError):
+            raise  # Timeout → direkt yukarı ilet, başka model deneme
+        except Exception as e:
+            error_str = str(e).lower()
+            if _is_fatal_gemini_error(error_str):
+                raise  # Key hatası → direkt yukarı ilet
+            # 429 / quota → bir sonraki modele geç
+            logger.warning(f"Model {model.model_name} quota/hata → sonraki deneniyor: {str(e)[:80]}")
+            last_exc = e
+            continue
+    if last_exc:
+        raise last_exc
+    raise ValueError("Hiçbir Gemini modeli yanıt veremedi (API veya Kota hatası).")
 
 
 # ── Sabitler ──────────────────────────────────────────────────────────────────
@@ -141,16 +203,50 @@ def analyze_face(image_base64: str) -> dict:
         dominant_emotion = result[0]["dominant_emotion"]
         confidence = result[0]["emotion"][dominant_emotion]
         mood_category = EMOTION_TO_MOOD.get(dominant_emotion, "chill")
-
-        # Türkçe açıklayıcı etiket ve emoji
         display = EMOTION_DISPLAY.get(dominant_emotion, {"label": dominant_emotion, "emoji": "🎵"})
 
+        emotion_label = display["label"]
+        emoji = display["emoji"]
+        explanation = f"Yüz ifadenizde '{emotion_label}' durumu tespit edildi."
+
+        # Gemini Vision Hibrit Eklentisi
+        if not _GEMINI_DISABLED and settings.GEMINI_API_KEY:
+            try:
+                gemini_prompt = f"""Sen bir duygu ve empati uzmanısın. Eklenen fotoğraftaki kişinin yüz ifadesini ve bulunduğu ortamı incele.
+Zaten yapay zeka tarafından bu kişinin temel duygusu '{dominant_emotion}' (Kategori: {mood_category}) olarak tespit edildi.
+Görevlerin:
+1. Kişinin yüz ifadesindeki ince detayları (gözler, tebessüm, yorgunluk vs.) ve ortamı gözlemleyerek o anki ruh halini 2 cümleyle, empati kurarak açıkla. Açıklaman "explanation" alanına yazılmalı (Kullanıcıya "sen" diye hitap et).
+2. Duyguyu en iyi yansıtan 1 adet emojiyi "emoji" alanına yaz.
+3. Kısa ve vurucu Türkçe bir duygu etiketi oluştur (örn: "Hafif yorgun ama umutlu") ve "emotion" alanına yaz.
+
+Sadece JSON dön. Format:
+{{
+  "emotion": "...",
+  "explanation": "...",
+  "emoji": "..."
+}}"""
+                image_part = {"mime_type": "image/jpeg", "data": image_base64}
+                response = _call_gemini_with_fallback([image_part, gemini_prompt], timeout=GEMINI_TIMEOUT + 3)
+                
+                raw_response = response.text.strip()
+                json_match = re.search(r'\{(?:[^{}]|\{[^{}]*\})*\}', raw_response)
+                
+                if json_match:
+                    gemini_result = json.loads(json_match.group())
+                    emotion_label = gemini_result.get("emotion", emotion_label)
+                    emoji = gemini_result.get("emoji", emoji)
+                    explanation = gemini_result.get("explanation", explanation)
+
+            except Exception as e:
+                logger.warning(f"Gemini Yüz Analizi Hatası (Fallback'e geçildi): {e}")
+
         return {
-            "emotion": display["label"],
-            "emoji": display["emoji"],
+            "emotion": emotion_label,
+            "emoji": emoji,
             "confidence": round(confidence, 2),
             "mood_category": mood_category,
-            "all_emotions": result[0]["emotion"]
+            "all_emotions": result[0]["emotion"],
+            "explanation": explanation
         }
     except Exception as e:
         raise ValueError(f"Yüz analizi başarısız: {str(e)}")
@@ -470,95 +566,73 @@ def _fallback_analyze_text(text: str) -> dict:
 def analyze_text(text: str) -> dict:
     """
     Kullanıcının yazdığı metni Gemini AI ile analiz eder.
-    Gemini 2.0 kota hatası verirse Gemini 1.5 modelini dener.
-    Tüm denemeler başarısız olursa anahtar kelime tabanlı fallback kullanır.
+    - API key geçersizse (401/403) Gemini kalıcı devre dışı → fallback.
+    - 429 quota/rate-limit → sadece bu isteği fallback'e düşür, sonraki istekte tekrar dene.
+    - Timeout → fallback.
     """
-    # Hızlı kontrol: Eğer geçerli bir API anahtarı formatı yoksa doğrudan yedek analize geç
-    if not settings.GEMINI_API_KEY or not (settings.GEMINI_API_KEY.startswith("AIza") or settings.GEMINI_API_KEY.startswith("AQ")):
-        logger.warning("Geçersiz veya eksik Gemini API Anahtarı. Doğrudan yedek analize geçiliyor.")
+    global _GEMINI_DISABLED
+
+    # ── 1. Kalıcı key hatası varsa direkt fallback ─────────────────────────────
+    if _GEMINI_DISABLED:
+        logger.info(f"Gemini kalıcı devre dışı ({_GEMINI_DISABLE_REASON}) → fallback.")
         return _fallback_analyze_text(text)
 
-    last_error = None
-    models_to_try = [
-        ("gemini-3.5-flash", gemini_model_35),
-        ("gemini-2.0-flash", gemini_model_20),
-        ("gemini-2.5-flash", gemini_model_25),
-        ("gemini-flash-latest", gemini_model_15)
-    ]
+    if not settings.GEMINI_API_KEY or len(settings.GEMINI_API_KEY.strip()) < 10:
+        logger.warning("Gemini API key eksik → fallback.")
+        _disable_gemini("API key eksik")
+        return _fallback_analyze_text(text)
 
-    for model_name, model in models_to_try:
-        for attempt in range(2):  # Model başına en fazla 2 deneme
-            try:
-                prompt = GEMINI_MOOD_PROMPT + f'"{text}"'
-                response = model.generate_content(prompt)
-                raw_response = response.text.strip()
+    # ── 2. Gemini çağrısı — önce 2.0-flash, quota doluysa 2.5-flash-lite ─────────
+    prompt = GEMINI_MOOD_PROMPT + f'"{text}"'
+    import google.generativeai as genai
+    try:
+        response = _call_gemini_with_fallback(
+            prompt, 
+            timeout=GEMINI_TIMEOUT,
+            generation_config=genai.types.GenerationConfig(response_mime_type="application/json")
+        )
+        raw_response = response.text.strip()
 
-                # JSON bloğunu ayıkla (```json ... ``` veya düz JSON)
-                json_match = re.search(r'\{(?:[^{}]|\{[^{}]*\})*\}', raw_response)
-                if not json_match:
-                    raise ValueError(f"Gemini'den geçerli JSON alınamadı: {raw_response[:200]}")
+        json_match = re.search(r'\{(?:[^{}]|\{[^{}]*\})*\}', raw_response)
+        if not json_match:
+            logger.warning("Gemini'den geçerli JSON alınamadı → fallback.")
+            return _fallback_analyze_text(text)
 
-                result = json.loads(json_match.group())
+        result = json.loads(json_match.group())
+        mood_category = result.get("mood_category", "chill")
+        if mood_category not in ("energetic", "chill", "melancholic", "intense", "calm"):
+            mood_category = "chill"
 
-                # Gerekli alanları doğrula
-                emotion = result.get("emotion", "belirsiz")
-                emoji = result.get("emoji", "🎵")
-                confidence = float(result.get("confidence", 50))
-                mood_category = result.get("mood_category", "chill")
-                explanation = result.get("explanation", "")
-                requested_artist = result.get("requested_artist")
+        requested_artist = result.get("requested_artist") or _extract_artist_fallback(text)
+        logger.info("Metin analizi Gemini ile tamamlandı.")
+        return {
+            "emotion":          result.get("emotion", "belirsiz"),
+            "emoji":            result.get("emoji", "🎵"),
+            "confidence":       round(float(result.get("confidence", 50)), 2),
+            "mood_category":    mood_category,
+            "input_text":       text,
+            "explanation":      result.get("explanation", ""),
+            "requested_artist": requested_artist,
+        }
 
-                # Mood category doğrulaması
-                valid_moods = ["energetic", "chill", "melancholic", "intense", "calm"]
-                if mood_category not in valid_moods:
-                    mood_category = "chill"
+    except (TimeoutError, concurrent.futures.TimeoutError):
+        logger.warning(f"Gemini timeout ({GEMINI_TIMEOUT}s) → fallback.")
+        return _fallback_analyze_text(text)
 
-                logger.info(f"Metin analizi başarıyla tamamlandı (Model: {model_name})")
-                return {
-                    "emotion":          emotion,
-                    "emoji":            emoji,
-                    "confidence":       round(confidence, 2),
-                    "mood_category":    mood_category,
-                    "input_text":       text,
-                    "explanation":      explanation,
-                    "requested_artist": requested_artist if requested_artist else _extract_artist_fallback(text),
-                }
+    except json.JSONDecodeError:
+        logger.warning("Gemini JSON parse hatası → fallback.")
+        return _fallback_analyze_text(text)
 
-            except json.JSONDecodeError as e:
-                last_error = e
-                logger.warning(f"Gemini yanıtı JSON olarak ayrıştırılamadı ({model_name}): {str(e)}")
-                break  # Bu modeli bırak, sonraki modele geç
-            except Exception as e:
-                last_error = e
-                error_str = str(e)
-
-                # 429 Rate Limit hatası mı kontrol et
-                if "429" in error_str or "quota" in error_str.lower() or "rate limit" in error_str.lower() or "rate_limit" in error_str.lower():
-                    if "quota" in error_str.lower() or "limit" in error_str.lower():
-                        logger.warning(f"{model_name} günlük kullanım kotası aşılmış. Bir sonraki model/seçeneğe geçiliyor.")
-                        break # Bu modeli bırak, sonraki modele geç
-                    wait_time = INITIAL_RETRY_DELAY * (2 ** attempt)  # 5s, 10s
-                    logger.warning(
-                        f"Gemini API geçici rate limit hatası ({model_name}, deneme {attempt + 1}/2). "
-                        f"{wait_time} saniye bekleniyor..."
-                    )
-                    time.sleep(wait_time)
-                    continue
-                else:
-                    # Diğer hatalar (örn. 401 veya beklenmedik hatalar) için sonraki modele geç
-                    logger.error(f"Gemini API hatası ({model_name}): {error_str}")
-                    # API Key geçersizliği veya yetkilendirme hatası varsa hiç deneme yapma, doğrudan fallback'e geç
-                    if "API_KEY_INVALID" in error_str or "invalid api key" in error_str.lower() or "401" in error_str:
-                        logger.error("Gemini API anahtarı geçersiz. Doğrudan yedek analize geçiliyor.")
-                        return _fallback_analyze_text(text)
-                    break
-
-    # Tüm denemeler başarısız → fallback kullan
-    logger.warning(
-        f"Tüm Gemini modelleri denemelerden sonra başarısız oldu. "
-        f"Fallback analiz kullanılıyor. Son hata: {last_error}"
-    )
-    return _fallback_analyze_text(text)
+    except Exception as e:
+        error_str = str(e).lower()
+        if _is_fatal_gemini_error(error_str):
+            # Geçersiz key → kalıcı kapat
+            _disable_gemini(str(e)[:120])
+            logger.error(f"Gemini key geçersiz, kalıcı kapatıldı: {str(e)[:120]}")
+        else:
+            # 429 quota, rate-limit, network hatası → geçici, sadece bu istek fallback
+            logger.warning(f"Gemini geçici hata (bu istek fallback, sonraki denenir): {str(e)[:120]}")
+        return _fallback_analyze_text(text)
 
 
 
@@ -662,9 +736,13 @@ def analyze_video(video_bytes: bytes) -> dict:
     Hem görüntüyü (yüz ifadeleri) hem de sesi (söylenen sözler + ses tonu) kullanarak duygu tespiti yapar.
     Gemini kullanılamıyorsa DeepFace fallback devreye girer.
     """
-    # Hızlı kontrol: Eğer geçerli bir API anahtarı formatı yoksa doğrudan video fallback'ine geç
-    if not settings.GEMINI_API_KEY or not (settings.GEMINI_API_KEY.startswith("AIza") or settings.GEMINI_API_KEY.startswith("AQ")):
-        logger.warning("Geçersiz veya eksik Gemini API Anahtarı. Doğrudan video yüz analizine geçiliyor.")
+    # Hızlı kontrol: kalıcı key hatası varsa direkt DeepFace
+    if _GEMINI_DISABLED:
+        logger.warning(f"Gemini kalıcı devre dışı ({_GEMINI_DISABLE_REASON}) → DeepFace fallback.")
+        return _video_fallback_with_deepface(video_bytes)
+
+    if not settings.GEMINI_API_KEY or len(settings.GEMINI_API_KEY.strip()) < 10:
+        logger.warning("Gemini API key eksik → DeepFace fallback.")
         return _video_fallback_with_deepface(video_bytes)
 
     import tempfile
@@ -686,7 +764,7 @@ def analyze_video(video_bytes: bytes) -> dict:
         attempts = 0
         while video_file.state.name == "PROCESSING":
             attempts += 1
-            if attempts > 30:  # Max 15 saniye bekle
+            if attempts > 12:  # Max 6 saniye bekle
                 raise ValueError("Video işleme zaman aşımına uğradı.")
             time.sleep(0.5)
             video_file = genai.get_file(video_file.name)
@@ -696,30 +774,22 @@ def analyze_video(video_bytes: bytes) -> dict:
 
         logger.info("Video başarıyla işlendi. Analiz başlatılıyor...")
 
-        # Analizi yap
-        response = None
-        last_err = None
-        for model_name, model in [
-            ("gemini-3.5-flash", gemini_model_35),
-            ("gemini-2.0-flash", gemini_model_20),
-            ("gemini-2.5-flash", gemini_model_25),
-            ("gemini-flash-latest", gemini_model_15)
-        ]:
-            try:
-                logger.info(f"Video analizi yapılıyor (Model: {model_name})...")
-                response = model.generate_content([video_file, GEMINI_VIDEO_PROMPT])
-                break
-            except Exception as e:
-                last_err = e
-                error_str = str(e)
-                # API Key geçersizliği veya yetkilendirme hatası varsa hiç deneme yapma, doğrudan fallback'e geç
-                if "API_KEY_INVALID" in error_str or "invalid api key" in error_str.lower() or "401" in error_str:
-                    logger.error("Gemini API anahtarı geçersiz. Doğrudan video yüz analizine geçiliyor.")
-                    return _video_fallback_with_deepface(video_bytes)
-                logger.warning(f"Video analizi {model_name} ile başarısız oldu: {e}")
-
-        if not response:
-            raise ValueError(f"Video analizi tüm modellerle başarısız oldu: {last_err}")
+        # Analizi yap — önce 2.0-flash, quota doluysa 2.5-flash-lite
+        try:
+            response = _call_gemini_with_fallback(
+                [video_file, GEMINI_VIDEO_PROMPT], timeout=GEMINI_TIMEOUT + 2
+            )
+        except (TimeoutError, concurrent.futures.TimeoutError):
+            logger.warning("Video analizi timeout → DeepFace fallback.")
+            return _video_fallback_with_deepface(video_bytes)
+        except Exception as e:
+            error_str = str(e).lower()
+            if _is_fatal_gemini_error(error_str):
+                _disable_gemini(str(e)[:120])
+                logger.error(f"Video: Gemini key geçersiz, kalıcı kapatıldı: {str(e)[:120]}")
+            else:
+                logger.warning(f"Video analizi geçici Gemini hatası → DeepFace fallback: {str(e)[:120]}")
+            return _video_fallback_with_deepface(video_bytes)
 
         raw_response = response.text.strip()
 
@@ -754,16 +824,12 @@ def analyze_video(video_bytes: bytes) -> dict:
     except Exception as e:
         err_msg = str(e) or repr(e) or type(e).__name__
         logger.error(f"Video analizi sırasında hata: {err_msg}")
-        # Gemini API key sorunu veya bağlantı hatası → DeepFace fallback
-        is_api_error = any(kw in err_msg.lower() for kw in ["api_key", "expired", "invalid", "401", "403", "400", "quota"])
-        if is_api_error or not err_msg:
-            logger.warning("Gemini API kullanılamıyor, DeepFace fallback deneniyor...")
-            try:
-                return _video_fallback_with_deepface(video_bytes)
-            except Exception as fallback_err:
-                raise ValueError(f"Video analizi başarısız oldu (Gemini ve fallback). Gemini API key'ini yenile: {fallback_err}")
-        raise ValueError(f"Video analizi başarısız oldu: {err_msg}")
-        
+        logger.warning("Gemini kullanılamıyor → DeepFace fallback deneniyor...")
+        try:
+            return _video_fallback_with_deepface(video_bytes)
+        except Exception as fallback_err:
+            raise ValueError(f"Video analizi başarısız (Gemini + fallback): {fallback_err}")
+
     finally:
         # Google bulutundaki dosyayı temizle
         if video_file:
@@ -772,11 +838,146 @@ def analyze_video(video_bytes: bytes) -> dict:
                 logger.info(f"Gemini bulut dosyası silindi: {video_file.name}")
             except Exception as e:
                 logger.warning(f"Gemini bulut dosyası silinemedi: {e}")
-                
+
         # Yerel geçici dosyayı sil
         if os.path.exists(temp_video_path):
             try:
                 os.unlink(temp_video_path)
                 logger.info(f"Geçici yerel dosya silindi: {temp_video_path}")
             except Exception as e:
-                logger.warning(f"Geçici yerel dosya silinemedi: {e}")
+                logger.warning(f"Geçici yerel dosya silinemedi: {e}")
+
+
+GEMINI_AUDIO_PROMPT = """Sen bir çok modlu (multimodal) ses ve duygu analizi uzmanısın. Gönderilen kısa ses kaydını hem sözel içerik (söylenen sözler) hem de akustik özellikler (ses tonu, konuşma hızı, sesin perdesi, tınısı, duraklamalar, heyecan/yorgunluk belirtileri) açısından analiz et.
+
+## Yapılacak Analiz
+1. Kişinin konuşmasından ne söylediğini kelimesi kelimesine Türkçe transkript (yazıya döküm) olarak çıkar.
+2. Sesin perdesini (pitch), konuşma hızını (tempo), tonlama ve tınısını (timbre) analiz et. Gerginlik, yorgunluk, sakinlik, heyecan, hüzün gibi duygusal ipuçlarını yakala.
+3. Transkript içeriğini ve akustik analizi birleştirerek nihai duygu durumunu belirle.
+
+## Ruh Hali Kategorileri (mood_category)
+Aşağıdaki 5 kategoriden BİRİNİ seç:
+- "energetic" → Mutlu, enerjik, heyecanlı, neşeli, coşkulu, motive, eğlenceli, kendini iyi hisseden
+- "chill" → Rahat, huzurlu, keyifli, tatmin olmuş, dingin, gevşemiş, kafası rahat
+- "melancholic" → Üzgün, hüzünlü, nostaljik, duygusal, kırık, yalnız, özlem dolu, içi buruk
+- "intense" → Öfkeli, sinirli, agresif, gergin, isyankâr, patlayacak gibi, sıkılmış, bunalmış
+- "calm" → Sakinleşmek isteyen, endişeli, kaygılı, tedirgin, yorgun, stresli ama rahatlamaya ihtiyacı var
+
+## Duygu Etiketi (emotion)
+Kullanıcının hissini en iyi özetleyen kısa ve samimi bir Türkçe ifade yaz (örn: "Yorgun ama huzurlu", "Heyecanlı ve kıpır kıpır", "İçi buruk ve duygusal").
+
+## Emoji
+Duyguyu en iyi yansıtan tek bir emoji seç.
+
+## Sanatçı/Şarkıcı Tespiti (requested_artist)
+Eğer kullanıcı ses kaydında belirli bir sanatçı, şarkıcı veya grup adı belirterek şarkı önerisi istemişse (örn: "Duman çal", "Tarkan'dan bir şeyler", "Sezen Aksu dinlemek istiyorum", "mangadan şarkı öner"), bu sanatçı/grup adının yalın halini (örn: "Duman", "Tarkan", "Sezen Aksu", "manga") "requested_artist" alanına yaz. Eğer herhangi bir sanatçı/grup adı belirtilmemişse null yap.
+
+## Kurallar
+1. Sesi tam transkripte et ve "input_text" alanına yaz. Konuşma yoksa bu alanı boş bırak veya "Konuşma algılanamadı" yaz.
+2. Sadece JSON formatında yanıt ver, başka hiçbir şey yazma.
+
+JSON formatı:
+{
+  "emotion": "kullanıcının hissini özetleyen kısa Türkçe ifade",
+  "emoji": "tek emoji",
+  "confidence": 0-100 arası güven skoru (sayı),
+  "mood_category": "energetic | chill | melancholic | intense | calm",
+  "input_text": "ses kaydındaki konuşmanın Türkçe transkripti",
+  "explanation": "Analizini (hem kelimeler hem de ses tonu/akustik açıdan) kısa ve samimi açıklayan Türkçe 1-2 cümle.",
+  "requested_artist": "tespit edilen sanatçı/grup adı (string) veya null"
+}
+"""
+
+def analyze_audio(audio_bytes: bytes) -> dict:
+    """
+    Kullanıcının kaydettiği 5-10 saniyelik ses verisini Gemini ile analiz eder.
+    Hem transkripti çıkarır hem de ses tonuna göre duygu durumunu belirler.
+    Gemini devre dışıysa veya hata alırsa keyword fallback'e düşer.
+    """
+    if _GEMINI_DISABLED:
+        logger.warning(f"Gemini kalıcı devre dışı ({_GEMINI_DISABLE_REASON})")
+        raise ValueError("Yapay zeka servisi şu an kullanılamıyor (API kapalı). Lütfen manuel analizi kullanın.")
+
+    if not settings.GEMINI_API_KEY or len(settings.GEMINI_API_KEY.strip()) < 10:
+        logger.warning("Gemini API key eksik.")
+        raise ValueError("Yapay zeka servisi şu an kullanılamıyor (API anahtarı eksik).")
+
+    audio_part = {
+        "mime_type": "audio/webm",
+        "data": audio_bytes
+    }
+
+    try:
+        logger.info("Ses analizine başlanıyor (inline data ile)...")
+
+        # Analizi yap — önce 2.0-flash, quota doluysa 2.5-flash-lite
+        import google.generativeai as genai
+        try:
+            response = _call_gemini_with_fallback(
+                [audio_part, GEMINI_AUDIO_PROMPT], 
+                timeout=GEMINI_TIMEOUT + 15,
+                generation_config=genai.types.GenerationConfig(response_mime_type="application/json")
+            )
+        except (TimeoutError, concurrent.futures.TimeoutError):
+            logger.warning("Ses analizi timeout.")
+            raise ValueError("Ses analizi çok uzun sürdü, lütfen tekrar deneyin.")
+        except Exception as e:
+            error_str = str(e).lower()
+            if _is_fatal_gemini_error(error_str):
+                _disable_gemini(str(e)[:120])
+                logger.error(f"Ses: Gemini key geçersiz, kalıcı kapatıldı: {str(e)[:120]}")
+                raise ValueError("Yapay zeka servisi şu an kullanılamıyor.")
+            else:
+                logger.warning(f"Ses analizi geçici Gemini hatası: {str(e)[:120]}")
+                raise ValueError(f"API Hatası (Ekran görüntüsü alın): {str(e)[:150]}")
+
+        raw_response = response.text.strip()
+
+        # JSON'ı ayıkla ve çöz
+        json_match = re.search(r'\{(?:[^{}]|\{[^{}]*\})*\}', raw_response)
+        if not json_match:
+            raise ValueError("Söyledikleriniz tam anlaşılamadı, lütfen daha net konuşarak tekrar deneyin.")
+
+        result = json.loads(json_match.group())
+
+        # Alanları doğrula ve temizle
+        emotion = result.get("emotion", "Sakin")
+        emoji = result.get("emoji", "🎙️")
+        confidence = float(result.get("confidence", 50.0))
+        mood_category = result.get("mood_category", "chill")
+        input_text = result.get("input_text", "").strip()
+        explanation = result.get("explanation", "")
+        
+        # Eğer kullanıcı konuşmadıysa veya sadece gürültü varsa
+        if not input_text or len(input_text) < 2 or "algılanamadı" in input_text.lower():
+            raise ValueError("Sesiniz net alınamadı veya konuşmadınız. Lütfen tekrar deneyin.")
+
+        valid_moods = ["energetic", "chill", "melancholic", "intense", "calm"]
+        if mood_category not in valid_moods:
+            mood_category = "chill"
+
+        # Şarkı araması yaparken faydalanmak üzere requested_artist ayıklaması
+        requested_artist = result.get("requested_artist")
+        if not requested_artist:
+            requested_artist = _extract_artist_fallback(input_text)
+
+        return {
+            "emotion": emotion,
+            "emoji": emoji,
+            "confidence": round(confidence, 2),
+            "mood_category": mood_category,
+            "input_text": input_text,
+            "explanation": explanation,
+            "requested_artist": requested_artist
+        }
+    except ValueError as ve:
+        raise ve
+    except Exception as e:
+        error_str = str(e).lower()
+        if _is_fatal_gemini_error(error_str):
+            _disable_gemini(str(e)[:120])
+            logger.error(f"Ses: Gemini key geçersiz, kalıcı kapatıldı: {str(e)[:120]}")
+            raise ValueError("Yapay zeka servisi şu an kullanılamıyor.")
+        else:
+            logger.warning(f"Ses analizi sırasında hata: {str(e)[:120]}")
+            raise ValueError("Analiz sırasında bir sorun oluştu, lütfen tekrar deneyin.")

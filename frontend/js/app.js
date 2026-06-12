@@ -15,6 +15,7 @@ let lastMoodCategory = null;          // Son analiz edilen mood (filtre değişi
 let lastEmotion = null;
 let lastSearchQuery = "";             // Sonuçlar içinde arama yapmak için (örn: "Duman")
 let lastRequestedArtist = null;       // Son algılanan veya filtrelenen sanatçı ismi
+let lastCapturedFaceBase64 = null;    // Son çekilen yüz fotoğrafı
 let moodDistChartInstance = null;
 let moodTrendChartInstance = null;
 
@@ -27,6 +28,9 @@ async function initApp() {
   setupCameraActions();
   setupLanguageFilter();
   setupAnalyticsTimeframe();
+  setupVoiceActions();
+  setupExportModalActions();
+  setupPasswordModalActions();
 
   // Check URL for token (from Spotify OAuth redirect)
   const urlParams = new URLSearchParams(window.location.search);
@@ -137,6 +141,7 @@ function showApp() {
   document.getElementById("app-screen").classList.add("active");
   if (currentUser) {
     document.getElementById("user-greeting").textContent = currentUser.username || currentUser.email;
+    updateSpotifyStatus();
     if (!api.getAvatar()) {
       const initial = (currentUser.username || currentUser.email || "U").trim().charAt(0).toUpperCase();
       const avatarEl = document.getElementById("user-avatar");
@@ -235,6 +240,7 @@ function setupMoodActions() {
 
       // Stop camera if switching away
       if (tab.dataset.moodTab !== "face") stopCamera();
+      if (tab.dataset.moodTab !== "voice") stopVoiceRecord(true);
     });
   });
 
@@ -294,6 +300,9 @@ async function performAnalysis(analysisFn) {
     currentResults = data;
     lastMoodCategory = data.mood_category;
     lastEmotion = data.emotion;
+    document.body.classList.forEach(c => { if (c.startsWith('theme-')) document.body.classList.remove(c); });
+    document.body.classList.add('theme-' + data.mood_category);
+    document.body.setAttribute('data-mood', data.mood_category);
     renderResults(data);
   } catch (err) {
     const errDiv = document.createElement("div");
@@ -331,9 +340,10 @@ async function refetchRecommendations() {
   }
 
   try {
-    const data = await api.manualMood(lastEmotion || lastMoodCategory, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre, lastRequestedArtist);
+    const data = await api.manualMood(lastEmotion || lastMoodCategory, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre, lastRequestedArtist, true); // no_save=true: yenile/filtre için DB'ye kaydetme
     currentResults = data;
-    // Update lastRequestedArtist from response to keep it in sync
+    // Tema rengi ve mood DEĞIŞTIRILMEZ — ruh hali değişmedi, sadece öneriler yenilendi
+    // lastMoodCategory ve lastEmotion güncellenmez, sadece artist güncellenir
     lastRequestedArtist = data.requested_artist || null;
     renderContentList(data.recommendations);
   } catch (err) {
@@ -385,16 +395,41 @@ function renderResults(data) {
   };
   const sectionTitle = contentTypeLabels[selectedContentType] || "Şarkılar";
 
+  const safeEmotion = DOMPurify.sanitize(data.emotion);
+  const safeInputText = DOMPurify.sanitize(data.input_text || "");
+  const safeExplanation = DOMPurify.sanitize(data.explanation || "");
+
+  let polaroidHtml = "";
+  if (data.source === "face" && lastCapturedFaceBase64) {
+    polaroidHtml = `
+      <div class="polaroid-wrapper">
+        <div class="polaroid-card">
+          <div class="polaroid-img-container">
+            <img src="data:image/jpeg;base64,${lastCapturedFaceBase64}" class="polaroid-img" alt="Yüz Analizi">
+            <div class="polaroid-tint" style="background-color: ${color}"></div>
+          </div>
+          <div class="polaroid-caption">
+            <span>${data.emoji || '✨'}</span> ${safeEmotion}
+          </div>
+          <button class="btn btn-sm" onclick="downloadPolaroid(this)" style="margin-top: 12px; width: 100%; background: #f0f0f0; color: #333; border: 1px dashed #ccc; padding: 6px; font-size: 0.85rem; cursor: pointer; border-radius: 4px;">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="vertical-align: middle; margin-right: 4px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg> Hatıra Olarak İndir
+          </button>
+        </div>
+      </div>
+    `;
+  }
+
   resultsSection.innerHTML = `
+    ${polaroidHtml}
     <div class="results-header">
       <div class="mood-badge" style="--mood-color: ${color}">
         <div class="mood-text">
-          <span class="mood-emotion">${data.emotion}</span>
+          <span class="mood-emotion">${safeEmotion}</span>
           <span class="mood-category-tag" style="background: ${color}">${label}</span>
         </div>
       </div>
-      ${(data.source === 'video' && data.input_text) ? `<p class="mood-transcript" style="margin-top: 1rem; font-style: italic; opacity: 0.85; background: rgba(255,255,255,0.05); padding: 0.75rem 1rem; border-left: 3px solid ${color}; border-radius: 4px;"><strong>Söyledikleriniz:</strong> "${data.input_text}"</p>` : ""}
-      ${data.explanation ? `<p class="mood-explanation">${data.explanation}</p>` : ""}
+      ${(data.source === 'voice' && data.input_text) ? `<p class="mood-transcript" style="margin-top: 1rem; font-style: italic; opacity: 0.85; background: rgba(255,255,255,0.05); padding: 0.75rem 1rem; border-left: 3px solid ${color}; border-radius: 4px;"><strong>Söyledikleriniz:</strong> "${safeInputText}"</p>` : ""}
+      ${data.explanation ? `<p class="mood-explanation">${safeExplanation}</p>` : ""}
     </div>
 
     <div class="results-header-row">
@@ -443,6 +478,13 @@ function renderResults(data) {
     </div>
 
     <div id="results-content-area" class="tracks-grid"></div>
+    ${selectedContentType === 'track' ? `
+      <div class="export-section">
+        <button id="btn-export-spotify" class="btn-export-spotify">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 8px;"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+          Spotify'a Çalma Listesi Olarak Aktar
+        </button>
+      </div>` : ''}
   `;
 
   // Render content
@@ -508,6 +550,17 @@ function renderResults(data) {
       refetchRecommendations();
     });
   });
+
+  const exportBtn = document.getElementById("btn-export-spotify");
+  if (exportBtn) {
+    exportBtn.addEventListener("click", () => {
+      if (!currentUser || !currentUser.spotify_connected) {
+        showToast("Lütfen önce sol menüden Spotify hesabınızı bağlayın.", "warning");
+        return;
+      }
+      openExportModal(data.id, data.emotion);
+    });
+  }
 }
 
 function renderContentList(items) {
@@ -525,13 +578,18 @@ function renderContentList(items) {
   container.innerHTML = items
     .map(
       (item, i) => {
+        const safeName = DOMPurify.sanitize(item.name);
+        const safeArtist = DOMPurify.sanitize(item.artist);
+        const safeAlbum = DOMPurify.sanitize(item.album || "");
+        const safeImageUrl = item.image_url ? DOMPurify.sanitize(item.image_url) : "";
+
         // Prepare object string safely to bind in HTML
         const trackObj = {
           spotify_id: item.id,
-          track_name: item.name,
-          artist_name: item.artist,
-          album_name: item.album || "",
-          image_url: item.image_url || "",
+          track_name: safeName,
+          artist_name: safeArtist,
+          album_name: safeAlbum,
+          image_url: safeImageUrl,
           spotify_url: item.spotify_url || ""
         };
         const trackJSON = encodeURIComponent(JSON.stringify(trackObj));
@@ -539,7 +597,7 @@ function renderContentList(items) {
         return `
     <div class="track-card" style="animation-delay: ${i * 0.06}s">
       <div class="track-image">
-        ${item.image_url ? `<img src="${item.image_url}" alt="${item.name}" loading="lazy">` : `<div class="track-placeholder"></div>`}
+        ${safeImageUrl ? `<img src="${safeImageUrl}" alt="${safeName}" loading="lazy">` : `<div class="track-placeholder"></div>`}
         <div class="track-actions">
           ${item.type === 'track' ? `<button class="btn-icon btn-like" onclick="toggleLike(this, '${trackJSON}')" title="Beğen"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></button>` : ""}
           ${item.preview_url ? `<button class="btn-icon btn-play" onclick="playPreview('${item.preview_url}', this)" title="Önizle"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor"><path d="M8 5v14l11-7z"/></svg></button>` : ""}
@@ -549,9 +607,9 @@ function renderContentList(items) {
         </div>
       </div>
       <div class="track-info">
-        <h4 class="track-name">${item.name}</h4>
-        <p class="track-artist">${item.artist}</p>
-        <p class="track-album">${item.album || ''}</p>
+        <h4 class="track-name">${safeName}</h4>
+        <p class="track-artist">${safeArtist}</p>
+        <p class="track-album">${safeAlbum}</p>
       </div>
     </div>`;
       }
@@ -668,8 +726,6 @@ function playPreview(url, btn) {
 function setupCameraActions() {
   document.getElementById("btn-start-camera").addEventListener("click", startCamera);
   document.getElementById("btn-capture").addEventListener("click", captureAndAnalyze);
-  const recordBtn = document.getElementById("btn-record-video");
-  if (recordBtn) recordBtn.addEventListener("click", recordVideoAndAnalyze);
 }
 
 async function startCamera() {
@@ -686,8 +742,6 @@ async function startCamera() {
     placeholder.classList.remove("active");
     document.getElementById("btn-start-camera").style.display = "none";
     document.getElementById("btn-capture").style.display = "inline-flex";
-    const recordBtn = document.getElementById("btn-record-video");
-    if (recordBtn) recordBtn.style.display = "inline-flex";
   } catch (err) {
     console.error("Camera access failed:", err.name, err.message);
     if (err.name === "NotAllowedError" || err.name === "PermissionDeniedError") {
@@ -713,8 +767,6 @@ function stopCamera() {
   document.getElementById("camera-placeholder").classList.add("active");
   document.getElementById("btn-start-camera").style.display = "inline-flex";
   document.getElementById("btn-capture").style.display = "none";
-  const recordBtn = document.getElementById("btn-record-video");
-  if (recordBtn) recordBtn.style.display = "none";
 }
 
 async function captureAndAnalyze() {
@@ -724,84 +776,22 @@ async function captureAndAnalyze() {
   canvas.height = video.videoHeight;
   canvas.getContext("2d").drawImage(video, 0, 0);
   const base64 = canvas.toDataURL("image/jpeg").split(",")[1];
-  stopCamera();
+  lastCapturedFaceBase64 = base64;
+  
+  const scanOverlay = document.querySelector(".scan-overlay");
+  if (scanOverlay) scanOverlay.classList.add("scanning");
+  video.pause();
+
   lastSearchQuery = ""; // Kameradan yüz arandığında aramayı sıfırla
-  await performAnalysis(() => api.analyzeFace(base64, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre));
-}
-
-async function recordVideoAndAnalyze() {
-  if (!cameraStream) {
-    showToast("Kamera akışı aktif değil.", "error");
-    return;
-  }
-
-  const btn = document.getElementById("btn-record-video");
-  const captureBtn = document.getElementById("btn-capture");
-  btn.disabled = true;
-  captureBtn.disabled = true;
-
+  
   try {
-    const chunks = [];
-    const options = { mimeType: 'video/webm;codecs=vp8,opus' };
-    
-    let recorder;
-    try {
-      recorder = new MediaRecorder(cameraStream, options);
-    } catch (e) {
-      console.warn("MimeType not supported, falling back to default recorder options");
-      recorder = new MediaRecorder(cameraStream);
-    }
-
-    recorder.ondataavailable = (e) => {
-      if (e.data && e.data.size > 0) {
-        chunks.push(e.data);
-      }
-    };
-
-    recorder.onstop = async () => {
-      const blob = new Blob(chunks, { type: 'video/webm' });
-      
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64 = reader.result.split(',')[1];
-        stopCamera();
-        lastSearchQuery = "";
-        btn.disabled = false;
-        captureBtn.disabled = false;
-        btn.innerHTML = 'Sesli Video Analizi (3sn - Gemini AI)';
-        
-        await performAnalysis(() => api.analyzeVideo(base64, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre));
-      };
-      reader.readAsDataURL(blob);
-    };
-
-    // Start recording
-    recorder.start();
-    
-    let secondsLeft = 3;
-    btn.innerHTML = `Kayıt yapılıyor... (${secondsLeft}sn) 🎙️`;
-    
-    const interval = setInterval(() => {
-      secondsLeft -= 1;
-      if (secondsLeft <= 0) {
-        clearInterval(interval);
-      } else {
-        btn.innerHTML = `Kayıt yapılıyor... (${secondsLeft}sn) 🎙️`;
-      }
-    }, 1000);
-
-    setTimeout(() => {
-      clearInterval(interval);
-      recorder.stop();
-    }, 3000); // Record for 3 seconds
-
-  } catch (err) {
-    showToast("Video kaydı başlatılamadı: " + err.message, "error");
-    btn.disabled = false;
-    captureBtn.disabled = false;
-    btn.innerHTML = 'Sesli Video Analizi (3sn - Gemini AI)';
+    await performAnalysis(() => api.analyzeFace(base64, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre));
+  } finally {
+    if (scanOverlay) scanOverlay.classList.remove("scanning");
+    stopCamera();
   }
 }
+
 
 // ── History ──────────────────────────────────────────────────────────────────
 async function loadHistory() {
@@ -857,13 +847,16 @@ async function loadHistory() {
 
     container.innerHTML = history
       .map(
-        (item, i) => `
+        (item, i) => {
+          const safeEmotion = DOMPurify.sanitize(item.emotion);
+          const safeSource = DOMPurify.sanitize(item.source);
+          return `
       <div class="history-card" style="animation-delay: ${i * 0.05}s">
         <div class="history-mood">
           <span class="history-icon">${moodIcons[item.mood_category] || "🎵"}</span>
           <div>
-            <strong>${item.emotion}</strong>
-            <span class="history-source">${item.source === 'face' ? 'Fotoğraf' : item.source === 'text' ? 'Metin' : item.source === 'manual' ? 'Manuel' : item.source === 'video' ? 'Sesli Video' : item.source}</span>
+            <strong>${safeEmotion}</strong>
+            <span class="history-source">${item.source === 'face' ? 'Fotoğraf' : item.source === 'text' ? 'Metin' : item.source === 'manual' ? 'Manuel' : item.source === 'video' ? 'Sesli Video' : safeSource}</span>
           </div>
         </div>
         <div class="history-meta">
@@ -873,7 +866,8 @@ async function loadHistory() {
             <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M6 19c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7H6v12zM19 4h-3.5l-1-1h-5l-1 1H5v2h14V4z"/></svg>
           </button>
         </div>
-      </div>`
+      </div>`;
+        }
       )
       .join("");
   } catch (err) {
@@ -1160,12 +1154,17 @@ async function loadLikedTracks() {
     container.innerHTML = tracks
       .map(
         (t, i) => {
+          const safeName = DOMPurify.sanitize(t.track_name);
+          const safeArtist = DOMPurify.sanitize(t.artist_name);
+          const safeAlbum = DOMPurify.sanitize(t.album_name || "");
+          const safeImageUrl = t.image_url ? DOMPurify.sanitize(t.image_url) : "";
+
           const trackObj = {
             spotify_id: t.id,
-            track_name: t.track_name,
-            artist_name: t.artist_name,
-            album_name: t.album_name || "",
-            image_url: t.image_url || "",
+            track_name: safeName,
+            artist_name: safeArtist,
+            album_name: safeAlbum,
+            image_url: safeImageUrl,
             spotify_url: t.spotify_url || ""
           };
           const trackJSON = encodeURIComponent(JSON.stringify(trackObj));
@@ -1173,7 +1172,7 @@ async function loadLikedTracks() {
           return `
       <div class="track-card" style="animation-delay: ${i * 0.06}s">
         <div class="track-image">
-          ${t.image_url ? `<img src="${t.image_url}" alt="${t.track_name}" loading="lazy">` : '<div class="track-placeholder"></div>'}
+          ${safeImageUrl ? `<img src="${safeImageUrl}" alt="${safeName}" loading="lazy">` : '<div class="track-placeholder"></div>'}
           <div class="track-actions">
             <button class="btn-icon btn-like liked" onclick="toggleLike(this, '${trackJSON}')" title="Beğenmekten Vazgeç"><svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></button>
             <button class="btn-icon btn-spotify" onclick="playInSpotifyPlayer('track', '${t.spotify_url ? t.spotify_url.split('/').pop() : t.id}')" title="Uygulama içinde oynat">
@@ -1182,9 +1181,9 @@ async function loadLikedTracks() {
           </div>
         </div>
         <div class="track-info">
-          <h4 class="track-name">${t.track_name}</h4>
-          <p class="track-artist">${t.artist_name}</p>
-          <p class="track-album">${t.album_name || ""}</p>
+          <h4 class="track-name">${safeName}</h4>
+          <p class="track-artist">${safeArtist}</p>
+          <p class="track-album">${safeAlbum}</p>
         </div>
       </div>`;
         }
@@ -1200,7 +1199,9 @@ function showToast(message, type = "info") {
   const container = document.getElementById("toast-container");
   const toast = document.createElement("div");
   toast.className = `toast toast-${type}`;
-  toast.innerHTML = `<span></span><span>${message}</span>`;
+  const msgSpan = document.createElement('span');
+  msgSpan.textContent = message;
+  toast.appendChild(msgSpan);
   container.appendChild(toast);
   requestAnimationFrame(() => toast.classList.add("show"));
   setTimeout(() => {
@@ -1208,3 +1209,420 @@ function showToast(message, type = "info") {
     setTimeout(() => toast.remove(), 300);
   }, 3000);
 }
+
+
+// ── Ses Kayıt İşlemleri (Voice Recording) ──────────────────────────────────
+let voiceRecorder = null;
+let voiceChunks = [];
+let voiceRecordInterval = null;
+let voiceRecordTimeout = null;
+
+// Audio Context for Visualizer
+let audioContext = null;
+let analyserNode = null;
+let audioVisualizerFrame = null;
+let audioSourceNode = null;
+
+function setupVoiceActions() {
+  const micBtn = document.getElementById("btn-mic-record");
+  if (!micBtn) return;
+  micBtn.addEventListener("click", () => {
+    if (micBtn.classList.contains("recording")) {
+      stopVoiceRecord(false);
+    } else {
+      startVoiceRecord();
+    }
+  });
+}
+
+async function startVoiceRecord() {
+  const micBtn = document.getElementById("btn-mic-record");
+  const statusLabel = document.getElementById("voice-status-label");
+  const timerEl = document.getElementById("voice-record-timer");
+  const visualizer = document.getElementById("voice-visualizer-bars");
+
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    voiceChunks = [];
+    
+    let options = { mimeType: 'audio/webm;codecs=opus' };
+    try {
+      voiceRecorder = new MediaRecorder(stream, options);
+    } catch (e) {
+      voiceRecorder = new MediaRecorder(stream);
+    }
+
+    voiceRecorder.ondataavailable = (e) => {
+      if (e.data && e.data.size > 0) {
+        voiceChunks.push(e.data);
+      }
+    };
+
+    voiceRecorder.onstop = async () => {
+      stream.getTracks().forEach(t => t.stop());
+      
+      if (voiceChunks.length === 0) return;
+      
+      const blob = new Blob(voiceChunks, { type: (voiceRecorder && voiceRecorder.mimeType) ? voiceRecorder.mimeType : 'audio/webm' });
+      const reader = new FileReader();
+      reader.onloadend = async () => {
+        const base64 = reader.result.split(',')[1];
+        
+        micBtn.classList.remove("recording");
+        if (visualizer) visualizer.classList.remove("active");
+        if (timerEl) timerEl.style.display = "none";
+        statusLabel.textContent = "Sesiniz analiz ediliyor...";
+        
+        lastSearchQuery = "";
+        await performAnalysis(() => api.analyzeAudio(base64, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre));
+        statusLabel.textContent = "Sesinizi analiz etmek için mikrofona dokunun";
+      };
+      reader.readAsDataURL(blob);
+    };
+
+    micBtn.classList.add("recording");
+    if (visualizer) visualizer.classList.add("active");
+    if (timerEl) {
+      timerEl.style.display = "block";
+      timerEl.textContent = `0:00 / 0:10`;
+    }
+    statusLabel.textContent = "Dinliyorum... Erken bitirmek için tekrar dokunun";
+
+    voiceRecorder.start();
+
+    // Setup Web Audio API for Dynamic Visualizer
+    try {
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      analyserNode = audioContext.createAnalyser();
+      analyserNode.fftSize = 64;
+      audioSourceNode = audioContext.createMediaStreamSource(stream);
+      audioSourceNode.connect(analyserNode);
+
+      const bufferLength = analyserNode.frequencyBinCount;
+      const dataArray = new Uint8Array(bufferLength);
+      const bars = document.querySelectorAll(".visualizer-bar");
+
+      function drawVisualizer() {
+        if (!analyserNode) return;
+        audioVisualizerFrame = requestAnimationFrame(drawVisualizer);
+        analyserNode.getByteFrequencyData(dataArray);
+        
+        if (bars.length > 0) {
+          const step = Math.max(1, Math.floor(bufferLength / bars.length));
+          bars.forEach((bar, i) => {
+            let sum = 0;
+            for (let j = 0; j < step; j++) {
+              sum += dataArray[i * step + j] || 0;
+            }
+            const avg = sum / step;
+            const height = 6 + (avg / 255) * 34; // 6px to 40px
+            bar.style.height = `${height}px`;
+            bar.style.animation = 'none'; // Disable CSS animation
+            bar.style.transition = 'height 0.05s ease';
+          });
+        }
+      }
+      drawVisualizer();
+    } catch (e) {
+      console.warn("Web Audio API visualizer could not be initialized:", e);
+    }
+
+    let seconds = 0;
+    voiceRecordInterval = setInterval(() => {
+      seconds += 1;
+      if (timerEl) timerEl.textContent = `0:${String(seconds).padStart(2, '0')} / 0:10`;
+      if (seconds >= 10) {
+        stopVoiceRecord(false);
+      }
+    }, 1000);
+
+    voiceRecordTimeout = setTimeout(() => {
+      stopVoiceRecord(false);
+    }, 10000);
+
+  } catch (err) {
+    console.error("Microphone access failed:", err);
+    showToast("Mikrofon erişimi sağlanamadı: " + err.message, "error");
+  }
+}
+
+function stopVoiceRecord(cancel = false) {
+  if (voiceRecordInterval) {
+    clearInterval(voiceRecordInterval);
+    voiceRecordInterval = null;
+  }
+  if (voiceRecordTimeout) {
+    clearTimeout(voiceRecordTimeout);
+    voiceRecordTimeout = null;
+  }
+  
+  if (audioVisualizerFrame) {
+    cancelAnimationFrame(audioVisualizerFrame);
+    audioVisualizerFrame = null;
+  }
+  if (audioSourceNode) {
+    audioSourceNode.disconnect();
+    audioSourceNode = null;
+  }
+  if (audioContext && audioContext.state !== "closed") {
+    audioContext.close();
+    audioContext = null;
+  }
+  analyserNode = null;
+  
+  // Reset bar heights
+  const bars = document.querySelectorAll(".visualizer-bar");
+  bars.forEach(bar => {
+    bar.style.height = '';
+    bar.style.animation = '';
+    bar.style.transition = '';
+  });
+
+  if (voiceRecorder && voiceRecorder.state !== "inactive") {
+    if (cancel) {
+      voiceChunks = [];
+    }
+    voiceRecorder.stop();
+    // Do not set voiceRecorder = null here, it breaks onstop execution.
+  }
+
+  const micBtn = document.getElementById("btn-mic-record");
+  const timerEl = document.getElementById("voice-record-timer");
+  const visualizer = document.getElementById("voice-visualizer-bars");
+  const statusLabel = document.getElementById("voice-status-label");
+
+  if (micBtn) micBtn.classList.remove("recording");
+  if (visualizer) visualizer.classList.remove("active");
+  if (timerEl) timerEl.style.display = "none";
+  if (statusLabel && cancel) statusLabel.textContent = "Sesinizi analiz etmek için mikrofona dokunun";
+}
+
+
+// ── Spotify Bağlantı Yönetimi ────────────────────────────────────────────────
+function updateSpotifyStatus() {
+  const dot = document.getElementById("spotify-status-dot");
+  const btn = document.getElementById("btn-sidebar-link-spotify");
+  
+  if (!currentUser || !dot || !btn) return;
+  
+  if (currentUser.spotify_connected) {
+    dot.classList.add("linked");
+    btn.classList.add("linked");
+    btn.textContent = "Bağlı";
+  } else {
+    dot.classList.remove("linked");
+    btn.classList.remove("linked");
+    btn.textContent = "Bağla";
+  }
+  
+  btn.onclick = () => {
+    if (currentUser.spotify_connected) {
+      showToast("Spotify hesabınız zaten bağlı.", "info");
+    } else {
+      const redirect = encodeURIComponent(window.location.origin + "/index.html");
+      const token = api.token;
+      window.location.href = `${API_BASE}/api/auth/spotify/login?redirect=${redirect}&token=${token}`;
+    }
+  };
+}
+
+
+// ── Spotify Çalma Listesi Aktarımı (Export Modal) ───────────────────────────
+let activeMoodHistoryIdForExport = null;
+
+function setupExportModalActions() {
+  const closeBtn = document.getElementById("btn-close-export-modal");
+  const cancelBtn = document.getElementById("btn-cancel-export");
+  const confirmBtn = document.getElementById("btn-confirm-export");
+  
+  if (closeBtn) closeBtn.addEventListener("click", closeExportModal);
+  if (cancelBtn) cancelBtn.addEventListener("click", closeExportModal);
+  
+  if (confirmBtn) {
+    confirmBtn.addEventListener("click", async () => {
+      const nameInput = document.getElementById("playlist-name-input");
+      const playlistName = nameInput ? nameInput.value.trim() : "";
+      
+      if (!playlistName) {
+        showToast("Lütfen geçerli bir çalma listesi adı girin.", "warning");
+        return;
+      }
+      
+      if (!activeMoodHistoryIdForExport) {
+        showToast("Ruh hali geçmiş kaydı bulunamadı.", "error");
+        return;
+      }
+      
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<span class="spinner"></span> Aktarılıyor...';
+      
+      try {
+        const result = await api.exportPlaylist(activeMoodHistoryIdForExport, playlistName);
+        showToast("Çalma listesi Spotify kütüphanenize eklendi! 🎉", "success");
+        closeExportModal();
+        
+        setTimeout(() => {
+          if (result.playlist_url) {
+            window.open(result.playlist_url, "_blank");
+          }
+        }, 1000);
+      } catch (err) {
+        showToast("Çalma listesi aktarılırken hata: " + err.message, "error");
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "Oluştur ve Aktar";
+      }
+    });
+  }
+}
+
+function openExportModal(moodHistoryId, emotion) {
+  activeMoodHistoryIdForExport = moodHistoryId;
+  const nameInput = document.getElementById("playlist-name-input");
+  
+  if (nameInput) {
+    const today = new Date().toLocaleDateString("tr-TR", { month: "short", day: "numeric" });
+    nameInput.value = `EmoTune - ${emotion || "Müzik"} [${today}]`;
+  }
+  
+  const modal = document.getElementById("spotify-export-modal");
+  if (modal) modal.classList.add("active");
+}
+
+function closeExportModal() {
+  activeMoodHistoryIdForExport = null;
+  const modal = document.getElementById("spotify-export-modal");
+  if (modal) modal.classList.remove("active");
+}
+
+function setupPasswordModalActions() {
+  const openBtn = document.getElementById("btn-open-change-password");
+  const closeBtn = document.getElementById("btn-close-password-modal");
+  const cancelBtn = document.getElementById("btn-cancel-password");
+  const confirmBtn = document.getElementById("btn-confirm-password");
+  
+  if (openBtn) {
+    openBtn.addEventListener("click", () => {
+      document.getElementById("change-current-password").value = "";
+      document.getElementById("change-new-password").value = "";
+      document.getElementById("change-password-error").textContent = "";
+      
+      const currentPwdGroup = document.getElementById("group-current-password");
+      const titleEl = document.getElementById("change-password-title");
+      const descEl = document.getElementById("change-password-description");
+      
+      if (currentUser && currentUser.spotify_connected) {
+        currentPwdGroup.style.display = "none";
+        titleEl.textContent = "Şifre Belirle";
+        descEl.textContent = "Hesabınıza e-posta ve şifre ile de giriş yapabilmek için buradan bir şifre belirleyin.";
+      } else {
+        currentPwdGroup.style.display = "block";
+        titleEl.textContent = "Şifre Değiştir";
+        descEl.textContent = "Hesabınız için şifrenizi güncelleyin.";
+      }
+      
+      const modal = document.getElementById("change-password-modal");
+      if (modal) modal.classList.add("active");
+    });
+  }
+  
+  if (closeBtn) closeBtn.addEventListener("click", closePasswordModal);
+  if (cancelBtn) cancelBtn.addEventListener("click", closePasswordModal);
+  
+  if (confirmBtn) {
+    confirmBtn.addEventListener("click", async () => {
+      const currentPwd = document.getElementById("change-current-password").value;
+      const newPwd = document.getElementById("change-new-password").value.trim();
+      const errEl = document.getElementById("change-password-error");
+      
+      errEl.textContent = "";
+      
+      if (newPwd.length < 6) {
+        errEl.textContent = "Yeni şifre en az 6 karakter olmalıdır.";
+        return;
+      }
+      
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML = '<span class="spinner"></span> Güncelleniyor...';
+      
+      try {
+        await api.changePassword(currentPwd || null, newPwd);
+        showToast("Şifreniz başarıyla güncellendi! 🎉", "success");
+        closePasswordModal();
+      } catch (err) {
+        errEl.textContent = err.message;
+      } finally {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = "Kaydet";
+      }
+    });
+  }
+}
+
+function closePasswordModal() {
+  const modal = document.getElementById("change-password-modal");
+  if (modal) modal.classList.remove("active");
+}
+
+// ── Polaroid İndirme ─────────────────────────────────────────────────────────
+window.downloadPolaroid = async function(btn) {
+  if (typeof html2canvas === "undefined") {
+    showToast("İndirme modülü yükleniyor, lütfen bekleyin.", "warning");
+    return;
+  }
+  
+  const card = btn.closest(".polaroid-card");
+  if (!card) return;
+  
+  const originalDisplay = btn.style.display;
+  btn.style.display = "none";
+  
+  const originalTransform = card.style.transform;
+  card.style.transform = "none"; // Rotate iptal
+  
+  const originalBoxShadow = card.style.boxShadow;
+  card.style.boxShadow = "none"; // İndirilen resimde gölge olmasın
+  
+  const originalPadding = card.style.padding;
+  card.style.padding = "15px 15px 30px 15px"; // Kesin görünmesi için inline padding
+  
+  const tint = card.querySelector('.polaroid-tint');
+  let originalMixBlend = '';
+  let originalOpacity = '';
+  if (tint) {
+      // html2canvas mix-blend-mode desteklemediği için normal opacity ile sahte bir filtre oluşturuyoruz
+      originalMixBlend = tint.style.mixBlendMode;
+      originalOpacity = tint.style.opacity;
+      tint.style.mixBlendMode = 'normal';
+      tint.style.opacity = '0.2';
+  }
+  
+  try {
+    const canvas = await html2canvas(card, {
+      scale: 3, // Daha yüksek çözünürlük
+      backgroundColor: "#ffffff",
+      useCORS: true,
+      logging: false
+    });
+    
+    const link = document.createElement("a");
+    link.download = `emotuneai-hatira-${Date.now()}.png`;
+    link.href = canvas.toDataURL("image/png");
+    link.click();
+    
+    showToast("Hatıra kartı indirildi! 🎉", "success");
+  } catch (err) {
+    showToast("İndirme başarısız oldu.", "error");
+    console.error("Polaroid indirme hatası:", err);
+  } finally {
+    btn.style.display = originalDisplay;
+    card.style.transform = originalTransform;
+    card.style.boxShadow = originalBoxShadow;
+    card.style.padding = originalPadding;
+    
+    if (tint) {
+        tint.style.mixBlendMode = originalMixBlend;
+        tint.style.opacity = originalOpacity;
+    }
+  }
+};

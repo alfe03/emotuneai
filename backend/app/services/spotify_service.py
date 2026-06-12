@@ -6,6 +6,8 @@ import random
 import logging
 import re
 import threading
+import concurrent.futures
+import time as _time
 
 logger = logging.getLogger(__name__)
 
@@ -51,6 +53,32 @@ def _is_noise_track(track: dict) -> bool:
         if kw in name or kw in album or kw in artists:
             return True
     return False
+
+
+# ── Basit In-Memory Cache ─────────────────────────────────────────────────────
+_cache: dict = {}
+_CACHE_TTL = 1800  # 30 dakika (5'ten artırıldı — aynı mood/dil sorgusu tekrar Spotify'a gitmesin)
+
+
+def _cache_get(key: str):
+    """Cache'den değer al. TTL dolmuşsa None döner."""
+    if key in _cache:
+        val, ts = _cache[key]
+        if _time.time() - ts < _CACHE_TTL:
+            return val
+        del _cache[key]
+    return None
+
+
+def _cache_set(key: str, value):
+    """Cache'e değer yaz. 200 girişten fazlaysa expired olanları temizle."""
+    _cache[key] = (value, _time.time())
+    if len(_cache) > 200:
+        now = _time.time()
+        expired = [k for k, (v, t) in _cache.items() if now - t > _CACHE_TTL]
+        for k in expired:
+            del _cache[k]
+
 
 # ── Türk Sanatçı Havuzu (tür bazlı) ─────────────────────────────────────────
 # Spotify aramasında dil filtresi olmadığı için bilinen sanatçı isimleri kullanıyoruz
@@ -273,24 +301,32 @@ def _get_tracks_by_artist_mood(artist_name: str, mood_category: str, limit: int 
     
     # 1. Deneme: Sanatçı + Duygu Anahtar Kelimeleri ile arama yap (örn: "Duman hüzünlü")
     # Her anahtar kelimeyi tek tek deneyerek en iyi sonuçları harmanlayalım
-    for kw in keywords[:3]:  # En güçlü ilk 3 kelimeyi dene
-        if len(tracks) >= search_limit:
-            break
+    def _search_kw(kw):
         try:
             query = f'{artist_name} {kw}'
             search_results = sp.search(q=query, type='track', limit=search_limit)
             items = search_results.get("tracks", {}).get("items", []) if search_results else []
+            results = []
             for track in items:
                 if track and track.get("id"):
-                    # Şarkının gerçekten o sanatçıya ait olup olmadığını kontrol et (benzer isimli başka bir sanatçı çıkmasın)
                     track_artists = [a["name"] for a in track.get("artists", [])]
                     if _is_matching_artist(artist_name, track_artists) and not _is_noise_track(track):
-                        tid = track["id"]
-                        if tid not in seen_ids:
-                            seen_ids.add(tid)
-                            tracks.append(_format_track(track))
+                        results.append(_format_track(track))
+            return results
         except Exception as e:
             logger.warning(f"Error searching {artist_name} {kw}: {e}")
+            return []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=3) as executor:
+        futures = [executor.submit(_search_kw, kw) for kw in keywords[:3]]
+        for future in concurrent.futures.as_completed(futures, timeout=3):  # 5s → 3s
+            try:
+                for t in future.result():
+                    if t["id"] not in seen_ids:
+                        seen_ids.add(t["id"])
+                        tracks.append(t)
+            except Exception:
+                pass
             
     # 2. Deneme: Eğer yeterli şarkı bulunamadıysa, genel sanatçı araması yap (örn: artist:"Duman")
     if len(tracks) < search_limit:
@@ -336,7 +372,7 @@ def get_recommendations(mood_category: str, language: str = "mixed",
         lang = "mixed"
 
     if content_type == "playlist":
-        return _get_playlists(mood_category, lang, search_query, genre, limit)
+        return _get_playlists(mood_category, lang, search_query, genre, limit, requested_artist)
     elif content_type == "podcast":
         return _get_podcasts(mood_category, lang, search_query, genre, limit)
     else:
@@ -464,7 +500,14 @@ def _get_recommendations_api(mood_category: str, lang: str, genre: str, limit: i
 
 
 def _get_tracks(mood_category: str, lang: str, search_query: str, genre: str, limit: int) -> list:
-    """Doğrudan track araması — daha isabetli sonuçlar."""
+    """Doğrudan track araması — daha isabetli sonuçlar. Cache destekli."""
+    cache_key = f"tracks:{mood_category}:{lang}:{search_query}:{genre}:{limit}"
+    cached = _cache_get(cache_key)
+    if cached:
+        logger.info(f"Cache hit: {cache_key}")
+        random.shuffle(cached)
+        return cached[:limit]
+
     market = LANG_MARKET.get(lang)
     existing = []
 
@@ -542,7 +585,9 @@ def _get_tracks(mood_category: str, lang: str, search_query: str, genre: str, li
             logger.error(f"Strateji 3 hatası: {e}")
 
     random.shuffle(existing)
-    return existing[:limit]
+    result = existing[:limit]
+    _cache_set(cache_key, list(result))
+    return result
 
 
 def _search_by_turkish_artists(mood_category: str, genre: str, limit: int, market: str | None) -> list:
@@ -554,26 +599,29 @@ def _search_by_turkish_artists(mood_category: str, genre: str, limit: int, marke
     artist_pool = TR_ARTISTS.get(genre_key, TR_ARTISTS["default"])
 
     # Rastgele 6 sanatçı seç
-    selected_artists = random.sample(artist_pool, min(6, len(artist_pool)))
+    selected_artists = random.sample(artist_pool, min(3, len(artist_pool)))  # 4 → 3 sanatçı
     all_tracks = []
 
-    for artist_name in selected_artists:
+    def _search_artist(a_name):
         try:
-            # artist: filtresi ile sanatçının şarkılarını ara
-            query = f'artist:{artist_name}'
-            search_kwargs = {"q": query, "type": "track", "limit": 5}
+            query = f'artist:{a_name}'
+            search_kwargs = {"q": query, "type": "track", "limit": 4}  # 5 → 4 sonuç/sanatçı
             if market:
                 search_kwargs["market"] = market
-
             results = _get_spotify_client().search(**search_kwargs)
             items = results.get("tracks", {}).get("items", []) if results else []
-            for track in items:
-                if track and track.get("id") and not _is_noise_track(track):
-                    all_tracks.append(_format_track(track))
-
+            return [_format_track(t) for t in items if t and t.get("id") and not _is_noise_track(t)]
         except Exception as e:
-            logger.warning(f"Sanatçı araması başarısız '{artist_name}': {e}")
-            continue
+            logger.warning(f"Sanatçı araması başarısız '{a_name}': {e}")
+            return []
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        futures = [executor.submit(_search_artist, name) for name in selected_artists]
+        for future in concurrent.futures.as_completed(futures, timeout=3):  # 5s → 3s
+            try:
+                all_tracks.extend(future.result())
+            except Exception:
+                pass
 
     random.shuffle(all_tracks)
     return all_tracks
@@ -598,35 +646,49 @@ def _search_tracks_direct(query: str, limit: int, market: str | None = None) -> 
 
 # ── Playlist önerileri ────────────────────────────────────────────────────────
 
-def _get_playlists(mood_category: str, lang: str, search_query: str, genre: str, limit: int) -> list:
-    query = _build_track_query(mood_category, lang, search_query, genre)
+def _get_playlists(mood_category: str, lang: str, search_query: str, genre: str, limit: int, requested_artist: str | None = None) -> list:
+    """Playlist önerileri. Sanatçı belirtildiyse önce o sanatçıya ait playlistler aranır."""
     market = LANG_MARKET.get(lang)
 
-    try:
-        search_kwargs = {"q": query, "type": "playlist", "limit": min(limit, 10)}
-        if market:
-            search_kwargs["market"] = market
+    def _fetch_playlists(query: str) -> list:
+        try:
+            search_kwargs = {"q": query, "type": "playlist", "limit": min(limit, 10)}
+            if market:
+                search_kwargs["market"] = market
+            results = _get_spotify_client().search(**search_kwargs)
+            playlists = results.get("playlists", {}).get("items", []) if results else []
+            return [
+                {
+                    "id":          p["id"],
+                    "name":        p["name"],
+                    "artist":      p["owner"]["display_name"] if p.get("owner") else "Spotify",
+                    "album":       f"{p.get('tracks', {}).get('total', 0)} şarkı",
+                    "preview_url": None,
+                    "image_url":   p["images"][0]["url"] if p.get("images") else None,
+                    "spotify_url": p.get("external_urls", {}).get("spotify", ""),
+                    "duration_ms": 0,
+                    "type":        "playlist",
+                }
+                for p in playlists if p
+            ]
+        except Exception as e:
+            raise ValueError(f"Playlist arama hatası: {str(e)}")
 
-        results = _get_spotify_client().search(**search_kwargs)
-        playlists = results.get("playlists", {}).get("items", []) if results else []
+    # Sanatçı belirtildiyse önce sanatçı adını sorguya ekle
+    if requested_artist:
+        try:
+            artist_query = f"{requested_artist} playlist"
+            logger.info(f"Sanatçı bazlı playlist araması: '{artist_query}'")
+            results = _fetch_playlists(artist_query)
+            if results:
+                return results
+            logger.warning(f"Sanatçı '{requested_artist}' için playlist bulunamadı, genel aramaya geçiliyor.")
+        except Exception as e:
+            logger.error(f"Sanatçı playlist araması hatası: {e}")
 
-        return [
-            {
-                "id":          p["id"],
-                "name":        p["name"],
-                "artist":      p["owner"]["display_name"] if p.get("owner") else "Spotify",
-                "album":       f"{p.get('tracks', {}).get('total', 0)} şarkı",
-                "preview_url": None,
-                "image_url":   p["images"][0]["url"] if p.get("images") else None,
-                "spotify_url": p.get("external_urls", {}).get("spotify", ""),
-                "duration_ms": 0,
-                "type":        "playlist",
-            }
-            for p in playlists if p
-        ]
-
-    except Exception as e:
-        raise ValueError(f"Playlist arama hatası: {str(e)}")
+    # Standart mood+genre bazlı sorgu
+    query = _build_track_query(mood_category, lang, search_query, genre)
+    return _fetch_playlists(query)
 
 
 # ── Podcast önerileri ─────────────────────────────────────────────────────────
@@ -681,4 +743,42 @@ def _format_track(track: dict) -> dict:
         "duration_ms": track.get("duration_ms", 0),
         "type":        "track",
     }
+
+
+def get_user_spotify_client(user, db) -> spotipy.Spotify:
+    """
+    Kullanıcının veritabanında kayıtlı Spotify token'ını alan,
+    eğer süresi dolmuşsa refresh token ile yenileyip veritabanını güncelleyen,
+    ve yetkilendirilmiş spotipy.Spotify istemcisini dönen fonksiyon.
+    """
+    import time
+    from spotipy.oauth2 import SpotifyOAuth
+    from sqlalchemy.orm import Session
+    
+    if not user.spotify_access_token or not user.spotify_refresh_token:
+        raise ValueError("Spotify hesabı bağlanmamış.")
+        
+    expires_at = user.spotify_token_expires_at or 0
+    # 60 saniye pay bırakarak kontrol et
+    if expires_at - time.time() < 60:
+        logger.info(f"Kullanıcı id={user.id} için Spotify token süresi dolmuş veya dolmak üzere. Yenileniyor...")
+        sp_oauth = SpotifyOAuth(
+            client_id=settings.SPOTIFY_CLIENT_ID,
+            client_secret=settings.SPOTIFY_CLIENT_SECRET,
+            redirect_uri=settings.SPOTIFY_REDIRECT_URI,
+        )
+        try:
+            token_info = sp_oauth.refresh_access_token(user.spotify_refresh_token)
+            if token_info:
+                user.spotify_access_token = token_info.get("access_token")
+                if token_info.get("refresh_token"):
+                    user.spotify_refresh_token = token_info.get("refresh_token")
+                user.spotify_token_expires_at = int(time.time() + token_info.get("expires_in", 3600))
+                db.commit()
+                logger.info("Spotify token başarıyla yenilendi ve veritabanına kaydedildi.")
+        except Exception as e:
+            logger.error(f"Spotify token yenileme hatası: {e}")
+            # Hata durumunda yine de mevcut token'ı denemesi için fırlatmıyoruz
+            
+    return spotipy.Spotify(auth=user.spotify_access_token)
 

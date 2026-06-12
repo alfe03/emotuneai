@@ -8,11 +8,20 @@
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='85'>E</text></svg>">
   <link rel="stylesheet" href="css/style.css?v=8">
   <!-- DOMPurify for XSS Protection -->
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.2/purify.min.js" integrity="sha512-RzIEX0BqEqqAofzR2XbBpsM+mZ7L2R6x/Ocd41gBEwLMFJ8g8x1lKItv9z4D2E555P9q/o89EeyuL3xO4a/ySA==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.5/purify.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <!-- Chart.js for beautiful analytics charts -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <!-- html2canvas for downloading polaroid images -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 </head>
 <body>
+
+  <!-- Aurora Arka Plan Küreleri -->
+  <div class="aurora-blobs">
+    <div class="blob blob-1"></div>
+    <div class="blob blob-2"></div>
+    <div class="blob blob-3"></div>
+  </div>
 
   <!-- ════════════════════════════════════════════════════════════════════════ -->
   <!--  AUTH SCREEN                                                           -->
@@ -124,6 +133,19 @@
           <div class="user-avatar" id="user-avatar">U</div>
           <span class="user-name" id="user-greeting">Kullanıcı</span>
         </div>
+        <div class="spotify-badge-wrapper" id="sidebar-spotify-wrapper">
+          <div class="spotify-status">
+            <div class="spotify-dot" id="spotify-status-dot"></div>
+            <span>Spotify</span>
+          </div>
+          <button class="btn-link-spotify" id="btn-sidebar-link-spotify">
+            Bağla
+          </button>
+        </div>
+        <button class="btn-change-password" id="btn-open-change-password">
+          <span class="nav-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span>
+          <span class="nav-text">Şifre Değiştir</span>
+        </button>
         <button class="btn-logout" id="btn-logout">
           <span class="nav-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></span>
           <span class="nav-text">Çıkış Yap</span>
@@ -145,7 +167,10 @@
             ✍️ Metin
           </button>
           <button class="mood-tab" data-mood-tab="face">
-            📸 Yüz / Video
+            📸 Yüz
+          </button>
+          <button class="mood-tab" data-mood-tab="voice">
+            🎙️ Ses
           </button>
           <button class="mood-tab" data-mood-tab="manual">
             🎛️ Manuel
@@ -186,9 +211,35 @@
             <button class="btn btn-primary" id="btn-capture" style="display:none">
               Fotoğraf Analizi (Hızlı)
             </button>
-            <button class="btn btn-accent" id="btn-record-video" style="display:none; background: linear-gradient(135deg, #9b51e0, #800080); border: none; color: white;">
-              Sesli Video Analizi (3sn - Gemini AI)
-            </button>
+
+          </div>
+        </div>
+
+        <!-- Voice Panel -->
+        <div id="panel-voice" class="mood-panel">
+          <div class="voice-panel-container">
+            <div class="mic-wrapper">
+              <button class="btn-mic" id="btn-mic-record" title="Ses Kaydı Başlat">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
+                  <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
+                  <line x1="12" y1="19" x2="12" y2="22"></line>
+                </svg>
+              </button>
+            </div>
+            <div class="voice-status" id="voice-status-label">Sesinizi analiz etmek için mikrofona dokunun</div>
+            <div class="voice-timer" id="voice-record-timer" style="display: none;">0:00 / 0:08</div>
+            <div class="voice-visualizer" id="voice-visualizer-bars">
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+              <div class="visualizer-bar"></div>
+            </div>
           </div>
         </div>
 
@@ -296,7 +347,7 @@
         <h1 class="page-title">Beğenilen Şarkılar</h1>
         <p class="page-subtitle">Daha önce beğendiğiniz şarkılarınız.</p>
         <div id="liked-list" class="tracks-grid"></div>
-      </section>
+      </div>
 
     </main>
     
@@ -306,6 +357,59 @@
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
       </button>
       <iframe id="spotify-iframe" src="" width="100%" height="152" frameborder="0" allowtransparency="true" allow="encrypted-media" style="border-radius: 12px;"></iframe>
+    </div>
+  </div>
+
+  <!-- Spotify Export Modal -->
+  <div class="custom-modal-backdrop" id="spotify-export-modal">
+    <div class="custom-modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title">Spotify'a Aktar</h3>
+        <button class="modal-close-btn" id="btn-close-export-modal">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">Seçtiğiniz şarkılar Spotify kütüphanenizde yeni bir çalma listesi olarak oluşturulacaktır.</p>
+        <div class="form-group">
+          <label for="playlist-name-input">Çalma Listesi Adı</label>
+          <input type="text" id="playlist-name-input" class="form-input" placeholder="Çalma listesi ismi girin...">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-logout" id="btn-cancel-export" style="margin: 0; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); width: auto;">İptal</button>
+        <button class="btn btn-primary" id="btn-confirm-export" style="width: auto;">Oluştur ve Aktar</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Change Password Modal -->
+  <div class="custom-modal-backdrop" id="change-password-modal">
+    <div class="custom-modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="change-password-title">Şifre Değiştir</h3>
+        <button class="modal-close-btn" id="btn-close-password-modal">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1.2rem;" id="change-password-description">
+          Hesabınız için şifrenizi güncelleyin.
+        </p>
+        <div class="form-group" id="group-current-password">
+          <label for="change-current-password">Mevcut Şifre</label>
+          <input type="password" id="change-current-password" class="form-input" placeholder="••••••••">
+        </div>
+        <div class="form-group">
+          <label for="change-new-password">Yeni Şifre</label>
+          <input type="password" id="change-new-password" class="form-input" placeholder="En az 6 karakter" required minlength="6">
+        </div>
+        <p id="change-password-error" class="form-error"></p>
+      </div>
+      <div class="modal-footer">
+        <button class="btn" id="btn-cancel-password" style="margin: 0; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); width: auto;">İptal</button>
+        <button class="btn btn-primary" id="btn-confirm-password" style="width: auto;">Kaydet</button>
+      </div>
     </div>
   </div>
 

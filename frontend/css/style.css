@@ -67,6 +67,80 @@ h6,
   /* Transitions */
   --transition: 0.2s ease;
   --transition-fast: 0.15s ease;
+
+  /* Theme variables for gradients */
+  --bg-gradient-2: #1e092b;
+}
+
+/* ── Mood Themes ── */
+body.theme-energetic {
+  --primary: #e8a838;
+  --primary-glow: rgba(232, 168, 56, 0.30);
+  --primary-dim: rgba(232, 168, 56, 0.12);
+  --bg-primary: #171105;
+  --bg-secondary: #241a08;
+  --bg-card: rgba(36, 26, 8, 0.85);
+  --bg-elevated: #2e2003;
+  --bg-input: #1e1608;
+  --bg-gradient-2: #2e2003;
+  --border: rgba(232, 168, 56, 0.12);
+  --border-hover: rgba(232, 168, 56, 0.25);
+}
+
+body.theme-chill {
+  --primary: #4aba7a;
+  --primary-glow: rgba(74, 186, 122, 0.30);
+  --primary-dim: rgba(74, 186, 122, 0.12);
+  --bg-primary: #05170d;
+  --bg-secondary: #082414;
+  --bg-card: rgba(8, 36, 20, 0.85);
+  --bg-elevated: #0a3018;
+  --bg-input: #071e10;
+  --bg-gradient-2: #052614;
+  --border: rgba(74, 186, 122, 0.12);
+  --border-hover: rgba(74, 186, 122, 0.25);
+}
+
+body.theme-melancholic {
+  --primary: #6b8fd9;
+  --primary-glow: rgba(107, 143, 217, 0.30);
+  --primary-dim: rgba(107, 143, 217, 0.12);
+  --bg-primary: #050b17;
+  --bg-secondary: #081224;
+  --bg-card: rgba(8, 18, 36, 0.85);
+  --bg-elevated: #0c1a3a;
+  --bg-input: #07101e;
+  --bg-gradient-2: #07193b;
+  --border: rgba(107, 143, 217, 0.12);
+  --border-hover: rgba(107, 143, 217, 0.25);
+}
+
+body.theme-intense {
+  --primary: #d94040;
+  --primary-glow: rgba(217, 64, 64, 0.30);
+  --primary-dim: rgba(217, 64, 64, 0.12);
+  --bg-primary: #170505;
+  --bg-secondary: #240808;
+  --bg-card: rgba(36, 8, 8, 0.85);
+  --bg-elevated: #360808;
+  --bg-input: #1e0606;
+  --bg-gradient-2: #360505;
+  --border: rgba(217, 64, 64, 0.12);
+  --border-hover: rgba(217, 64, 64, 0.25);
+}
+
+body.theme-calm {
+  --primary: #5ba8c8;
+  --primary-glow: rgba(91, 168, 200, 0.30);
+  --primary-dim: rgba(91, 168, 200, 0.12);
+  --bg-primary: #051217;
+  --bg-secondary: #081d24;
+  --bg-card: rgba(8, 29, 36, 0.85);
+  --bg-elevated: #0c2830;
+  --bg-input: #071920;
+  --bg-gradient-2: #0b242e;
+  --border: rgba(91, 168, 200, 0.12);
+  --border-hover: rgba(91, 168, 200, 0.25);
 }
 
 /* ── Reset ────────────────────────────────────────────────────────────────── */
@@ -85,14 +159,15 @@ html {
 
 body {
   font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
-  background: linear-gradient(-45deg, #121212, #1e092b, #0c2118, #181818);
+  background: linear-gradient(-45deg, var(--bg-primary, #121212), var(--bg-gradient-2, #1e092b), var(--bg-secondary, #181818), var(--bg-primary, #121212));
   background-size: 400% 400%;
-  animation: unusualBg 20s ease infinite;
+  background-position: 0% 50%;
   color: var(--text-primary);
   line-height: 1.6;
   min-height: 100vh;
   overflow-x: hidden;
   -webkit-font-smoothing: antialiased;
+  transition: background-color 1.2s ease, color 0.5s ease;
 }
 
 @keyframes unusualBg {
@@ -553,6 +628,36 @@ body {
 .btn-logout:hover {
   background: rgba(255, 82, 82, 0.1);
   color: var(--accent-intense);
+}
+
+.btn-change-password {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  padding: 0.65rem 1rem;
+  border: none;
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-muted);
+  font-family: inherit;
+  font-size: 0.85rem;
+  cursor: pointer;
+  transition: var(--transition);
+}
+
+.sidebar.collapsed .btn-change-password {
+  justify-content: center;
+  padding: 0.65rem 0;
+}
+
+.sidebar.collapsed .btn-change-password .nav-text {
+  display: none;
+}
+
+.btn-change-password:hover {
+  background: var(--primary-dim);
+  color: var(--primary);
 }
 
 /* ── Main Content ─────────────────────────────────────────────────────────── */
@@ -1637,6 +1742,28 @@ body {
     margin-right: 0;
   }
 
+  .btn-change-password {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.3rem;
+    padding: 0.5rem;
+    font-size: 0.75rem;
+    background: transparent;
+    color: var(--text-muted);
+    width: auto;
+    border: none;
+  }
+
+  .btn-change-password .nav-icon {
+    margin-right: 0;
+  }
+
+  .btn-change-password:hover {
+    background: transparent;
+    color: var(--primary);
+  }
+
   .sidebar-nav {
     flex-direction: row;
     flex: 1;
@@ -1828,3 +1955,483 @@ body {
   stroke: #1ed760;
   transition: fill 0.3s ease, stroke 0.3s ease;
 }
+
+
+/* ── Aurora Arka Plan Küreleri (Floating Blobs) ───────────────────────────── */
+.aurora-blobs {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  opacity: 0.45;
+}
+
+.blob {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(140px);
+  mix-blend-mode: screen;
+  transition: background-color 1.5s ease;
+  animation: floatBlob 25s infinite alternate ease-in-out;
+}
+
+.blob-1 {
+  width: 500px;
+  height: 500px;
+  top: -10%;
+  right: -5%;
+  background-color: var(--primary-glow);
+  animation-duration: 22s;
+}
+
+.blob-2 {
+  width: 600px;
+  height: 600px;
+  bottom: -15%;
+  left: -5%;
+  background-color: var(--primary-dim);
+  animation-duration: 30s;
+  animation-delay: -5s;
+}
+
+.blob-3 {
+  width: 400px;
+  height: 400px;
+  top: 40%;
+  left: 45%;
+  background-color: rgba(124, 58, 237, 0.08); /* Hafif mor ışık */
+  animation-duration: 25s;
+  animation-delay: -10s;
+}
+
+@keyframes floatBlob {
+  0% {
+    transform: translate(0, 0) scale(1);
+  }
+  50% {
+    transform: translate(100px, 80px) scale(1.15);
+  }
+  100% {
+    transform: translate(-50px, -100px) scale(0.9);
+  }
+}
+
+
+/* ── Ses Kayıt Arayüzü (Voice Panel) ──────────────────────────────────────── */
+.voice-panel-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 3rem 2rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(12px);
+  margin-top: 1rem;
+  text-align: center;
+}
+
+.mic-wrapper {
+  position: relative;
+  margin-bottom: 2rem;
+}
+
+.btn-mic {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, var(--primary), var(--accent-calm));
+  border: none;
+  color: #fff;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  box-shadow: 0 8px 32px var(--primary-glow);
+  z-index: 2;
+  position: relative;
+}
+
+.btn-mic svg {
+  width: 40px;
+  height: 40px;
+}
+
+.btn-mic:hover {
+  transform: scale(1.05);
+  box-shadow: 0 12px 40px var(--primary-glow);
+}
+
+.btn-mic.recording {
+  background: linear-gradient(135deg, var(--accent-intense), #ff4d4d);
+  box-shadow: 0 8px 32px rgba(217, 64, 64, 0.4);
+  animation: pulse-mic 1.5s infinite;
+}
+
+@keyframes pulse-mic {
+  0% {
+    box-shadow: 0 0 0 0 rgba(217, 64, 64, 0.5);
+  }
+  70% {
+    box-shadow: 0 0 0 20px rgba(217, 64, 64, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(217, 64, 64, 0);
+  }
+}
+
+.voice-status {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.5rem;
+  min-height: 1.5em;
+}
+
+.voice-timer {
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  font-family: monospace;
+  background: var(--bg-secondary);
+  padding: 0.2rem 0.6rem;
+  border-radius: 4px;
+  border: 1px solid var(--border);
+  margin-bottom: 1.5rem;
+}
+
+.voice-visualizer {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  height: 40px;
+  margin-bottom: 1rem;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+}
+
+.voice-visualizer.active {
+  opacity: 1;
+}
+
+.visualizer-bar {
+  width: 4px;
+  height: 10px;
+  background-color: var(--primary);
+  border-radius: 2px;
+  transition: height 0.1s ease;
+  animation: visualizer-bounce 1s infinite alternate;
+}
+
+@keyframes visualizer-bounce {
+  0% { height: 6px; }
+  100% { height: 32px; }
+}
+
+/* Farklı barlar için animasyon gecikmeleri */
+.visualizer-bar:nth-child(2n) { animation-delay: 0.15s; background-color: var(--accent-calm); }
+.visualizer-bar:nth-child(3n) { animation-delay: 0.3s; }
+.visualizer-bar:nth-child(4n) { animation-delay: 0.45s; background-color: var(--accent-calm); }
+.visualizer-bar:nth-child(5n) { animation-delay: 0.6s; }
+
+
+/* ── Spotify Bağlama Rozetleri (Spotify Link Indicator) ───────────────────── */
+.spotify-badge-wrapper {
+  margin-top: 1.5rem;
+  padding: 0.8rem 1rem;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-secondary);
+  font-size: 0.85rem;
+}
+
+.spotify-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 500;
+}
+
+.spotify-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background-color: #666;
+}
+
+.spotify-dot.linked {
+  background-color: #1ed760;
+  box-shadow: 0 0 8px rgba(30, 215, 96, 0.6);
+}
+
+.btn-link-spotify {
+  background: #1db954;
+  color: white;
+  border: none;
+  padding: 0.35rem 0.8rem;
+  border-radius: 20px;
+  font-weight: 600;
+  font-size: 0.78rem;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  transition: var(--transition);
+}
+
+.btn-link-spotify:hover {
+  background: #1ed760;
+  transform: scale(1.03);
+}
+
+.btn-link-spotify.linked {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+}
+
+.btn-link-spotify.linked:hover {
+  background: rgba(255, 82, 82, 0.1);
+  color: var(--accent-intense);
+  border-color: rgba(255, 82, 82, 0.3);
+}
+
+
+/* ── Modal / Popup Arayüzü (Spotify Export Modal) ────────────────────────── */
+.custom-modal-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.7);
+  backdrop-filter: blur(8px);
+  z-index: 2000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.3s ease;
+}
+
+.custom-modal-backdrop.active {
+  opacity: 1;
+  pointer-events: all;
+}
+
+.custom-modal-card {
+  width: 90%;
+  max-width: 440px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 2rem;
+  box-shadow: var(--shadow-lg);
+  transform: scale(0.9);
+  transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.custom-modal-backdrop.active .custom-modal-card {
+  transform: scale(1);
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.5rem;
+}
+
+.modal-title {
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.modal-close-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 0.2rem;
+  display: flex;
+  align-items: center;
+  transition: var(--transition);
+}
+
+.modal-close-btn:hover {
+  color: var(--text-primary);
+}
+
+.modal-body {
+  margin-bottom: 1.5rem;
+}
+
+.modal-footer {
+  display: flex;
+  gap: 0.8rem;
+  justify-content: flex-end;
+}
+
+/* Şarkı listesinin altındaki Spotify'a Aktar butonu alanı */
+.export-section {
+  margin-top: 1.5rem;
+  padding-top: 1.2rem;
+  border-top: 1px solid var(--border);
+  display: flex;
+  justify-content: center;
+}
+
+.btn-export-spotify {
+  background: #1db954;
+  color: white;
+  border: none;
+  font-weight: 700;
+  font-size: 0.95rem;
+  padding: 0.75rem 1.8rem;
+  border-radius: 30px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  box-shadow: 0 6px 20px rgba(29, 185, 84, 0.3);
+  transition: var(--transition);
+}
+
+.btn-export-spotify:hover {
+  background: #1ed760;
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(30, 215, 96, 0.4);
+}
+
+.btn-export-spotify:active {
+  transform: translateY(0);
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  YÜZ ANALİZİ EKSTRALARI (Lazer, Polaroid, Dinamik Arkaplan)               */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Lazer Animasyonu */
+.scan-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 10;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  display: none;
+}
+
+.scan-overlay.scanning {
+  display: block;
+}
+
+.scan-overlay.scanning::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: var(--primary);
+  box-shadow: 0 0 15px var(--primary-glow), 0 0 30px var(--primary);
+  animation: laserScan 1.5s infinite linear;
+}
+
+@keyframes laserScan {
+  0% { transform: translateY(-10px); }
+  50% { transform: translateY(100%); }
+  100% { transform: translateY(-10px); }
+}
+
+/* Polaroid Kartı */
+.polaroid-wrapper {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 2rem;
+  animation: fadeSlideUp 0.6s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+.polaroid-card {
+  background: #fff;
+  padding: 10px 10px 25px 10px;
+  border-radius: 4px;
+  box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+  transform: rotate(-3deg);
+  transition: transform 0.3s ease;
+  position: relative;
+  max-width: 250px;
+}
+
+.polaroid-card:hover {
+  transform: rotate(0deg) scale(1.05);
+}
+
+.polaroid-img-container {
+  width: 100%;
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+  background: #000;
+}
+
+.polaroid-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: grayscale(20%);
+}
+
+.polaroid-tint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  mix-blend-mode: overlay;
+  opacity: 0.6;
+}
+
+.polaroid-caption {
+  text-align: center;
+  color: #333;
+  font-family: 'Caveat', 'Comic Sans MS', cursive, sans-serif;
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-top: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Dinamik Arka Plan Renkleri (Aurora Blobs) */
+body[data-mood="energetic"] .blob-1 { background-color: rgba(255, 82, 82, 0.3); }
+body[data-mood="energetic"] .blob-2 { background-color: rgba(255, 165, 0, 0.2); }
+
+body[data-mood="melancholic"] .blob-1 { background-color: rgba(64, 115, 255, 0.2); }
+body[data-mood="melancholic"] .blob-2 { background-color: rgba(30, 60, 150, 0.2); }
+
+body[data-mood="intense"] .blob-1 { background-color: rgba(220, 20, 60, 0.3); }
+body[data-mood="intense"] .blob-2 { background-color: rgba(139, 0, 0, 0.3); }
+
+body[data-mood="chill"] .blob-1 { background-color: rgba(46, 204, 113, 0.2); }
+body[data-mood="chill"] .blob-2 { background-color: rgba(26, 188, 156, 0.2); }
+
+body[data-mood="calm"] .blob-1 { background-color: rgba(155, 89, 182, 0.2); }
+body[data-mood="calm"] .blob-2 { background-color: rgba(142, 68, 173, 0.2); }
+

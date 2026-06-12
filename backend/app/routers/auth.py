@@ -8,8 +8,8 @@ from sqlalchemy.orm import Session
 from urllib.parse import unquote, urlparse, parse_qsl, urlencode, urlunparse
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
-from app.services.auth_service import create_user, authenticate_user, create_access_token, get_user_by_email
-from app.schemas.user import RegisterRequest, LoginRequest, TokenResponse, UserResponse
+from app.services.auth_service import create_user, authenticate_user, create_access_token, get_user_by_email, get_user_by_id, decode_access_token, get_user_by_username, hash_password, verify_password
+from app.schemas.user import RegisterRequest, LoginRequest, TokenResponse, UserResponse, ChangePasswordRequest
 from app.models.models import User
 import logging
 
@@ -37,7 +37,7 @@ def get_spotify_oauth():
         client_id=settings.SPOTIFY_CLIENT_ID,
         client_secret=settings.SPOTIFY_CLIENT_SECRET,
         redirect_uri=settings.SPOTIFY_REDIRECT_URI,
-        scope="user-read-private user-read-email"
+        scope="user-read-private user-read-email playlist-modify-public playlist-modify-private"
     )
 
 @router.get("/spotify/login")
@@ -46,7 +46,14 @@ def spotify_login(request: Request):
         raise HTTPException(status_code=400, detail="Spotify ayarları (CLIENT_ID/SECRET) yapılmamış.")
     sp_oauth = get_spotify_oauth()
     redirect_target = request.query_params.get("redirect") or DEFAULT_FRONTEND_URL
-    state = redirect_target
+    token = request.query_params.get("token")
+    
+    # Eğer token varsa state'e ekle: "redirect|token"
+    if token:
+        state = f"{redirect_target}|{token}"
+    else:
+        state = redirect_target
+        
     auth_url = sp_oauth.get_authorize_url(state=state)
     return RedirectResponse(url=auth_url)
 
@@ -55,7 +62,19 @@ def spotify_callback(request: Request, db: Session = Depends(get_db)):
     code = request.query_params.get("code")
     error = request.query_params.get("error")
     state = request.query_params.get("state")
-    frontend_url = unquote(state) if state else DEFAULT_FRONTEND_URL
+    
+    frontend_url = DEFAULT_FRONTEND_URL
+    linking_token = None
+    
+    if state:
+        unquoted_state = unquote(state)
+        if "|" in unquoted_state:
+            parts = unquoted_state.split("|", 1)
+            frontend_url = parts[0]
+            linking_token = parts[1]
+        else:
+            frontend_url = unquoted_state
+            
     if not (frontend_url.startswith("http://") or frontend_url.startswith("https://")):
         frontend_url = DEFAULT_FRONTEND_URL
     
@@ -72,6 +91,10 @@ def spotify_callback(request: Request, db: Session = Depends(get_db)):
         logger.info("Token alınıyor...")
         token_info = sp_oauth.get_access_token(code)
         access_token = token_info.get("access_token")
+        refresh_token = token_info.get("refresh_token")
+        expires_in = token_info.get("expires_in", 3600)
+        import time
+        expires_at = int(time.time() + expires_in)
         logger.info("Token başarıyla alındı.")
     except Exception as e:
         logger.error(f"Token alınırken hata: {str(e)}")
@@ -89,21 +112,42 @@ def spotify_callback(request: Request, db: Session = Depends(get_db)):
             email = f"{spotify_id}@spotify.com"
             
         user_data = user_info or {}
-        # Ensure username is always a string (fallback to email local-part or generic name)
         username = user_data.get("display_name") or user_data.get("id") or (email.split('@')[0] if email else "spotify_user")
         username = str(username)
         images = user_data.get("images") or []
         avatar_url = images[0].get("url") if images else None
         
-        user = get_user_by_email(db, email)
-        if not user:
-            import secrets
-            import string
-            random_password = "".join(secrets.choice(string.ascii_letters + string.digits) for i in range(16))
-            user = create_user(db, email=email, username=username, password=random_password)
-            logger.info("Yeni kullanıcı veritabanına kaydedildi.")
+        # HESAP BAĞLAMA (LINKING FLOW)
+        if linking_token:
+            user_id = decode_access_token(linking_token)
+            if not user_id:
+                logger.warning("Geçersiz linking token'ı ile hesap bağlama denendi.")
+                return RedirectResponse(url=build_redirect_url(frontend_url, {"error": "invalid_linking_token"}))
+                
+            user = get_user_by_id(db, user_id)
+            if not user:
+                logger.warning(f"Bağlanmak istenen user_id={user_id} bulunamadı.")
+                return RedirectResponse(url=build_redirect_url(frontend_url, {"error": "user_not_found"}))
+                
+            logger.info(f"Spotify hesabı mevcut kullanıcıya ({user.username}) bağlanıyor.")
         else:
-            logger.info("Mevcut kullanıcı ile giriş yapıldı.")
+            # NORMAL GİRİŞ/KAYIT AKIŞI
+            user = get_user_by_email(db, email)
+            if not user:
+                import secrets
+                import string
+                random_password = "".join(secrets.choice(string.ascii_letters + string.digits) for i in range(16))
+                user = create_user(db, email=email, username=username, password=random_password)
+                logger.info("Yeni kullanıcı veritabanına kaydedildi.")
+            else:
+                logger.info("Mevcut kullanıcı ile giriş yapıldı.")
+        
+        # Token bilgilerini kullanıcının veritabanı satırına kaydet/güncelle
+        user.spotify_access_token = access_token
+        if refresh_token:
+            user.spotify_refresh_token = refresh_token
+        user.spotify_token_expires_at = expires_at
+        db.commit()
 
         jwt_token = create_access_token(cast(int, user.id))
         
@@ -122,13 +166,13 @@ def spotify_callback(request: Request, db: Session = Depends(get_db)):
 def register(request: RegisterRequest, db: Session = Depends(get_db)):
     if get_user_by_email(db, request.email):
         raise HTTPException(status_code=400, detail="Bu email zaten kayıtlı")
+    if get_user_by_username(db, request.username):
+        raise HTTPException(status_code=400, detail="Bu kullanıcı adı zaten alınmış")
     user = create_user(db, request.email, request.username, request.password)
     token = create_access_token(cast(int, user.id))
     return {"access_token": token, "token_type": "bearer"}
 
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-limiter = Limiter(key_func=get_remote_address)
+from app.core.limiter import limiter
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("5/minute")
@@ -143,3 +187,24 @@ def login(request: Request, login_request: LoginRequest, db: Session = Depends(g
 @router.get("/me", response_model=UserResponse)
 def me(current_user: User = Depends(get_current_user)):
     return current_user
+
+
+@router.post("/change-password")
+def change_password(request: ChangePasswordRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Spotify kullanan ve henüz kendi şifresini belirlememiş kullanıcılar (yani mevcut şifreyi bilmeyenler)
+    # için mevcut şifre doğrulamasını atlıyoruz.
+    if current_user.spotify_connected and not request.current_password:
+        pass
+    else:
+        if not request.current_password:
+            raise HTTPException(status_code=400, detail="Mevcut şifrenizi girmelisiniz.")
+        if not verify_password(request.current_password, str(current_user.hashed_password)):
+            raise HTTPException(status_code=400, detail="Mevcut şifre hatalı.")
+            
+    if len(request.new_password) < 6:
+        raise HTTPException(status_code=400, detail="Yeni şifre en az 6 karakter olmalıdır.")
+        
+    current_user.hashed_password = hash_password(request.new_password)
+    db.commit()
+    return {"message": "Şifre başarıyla güncellendi."}
+

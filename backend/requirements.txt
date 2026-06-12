@@ -13,7 +13,6 @@ pydantic-settings==2.3.4
 
 # Authentication
 python-jose[cryptography]==3.3.0
-passlib[bcrypt]==1.7.4
 bcrypt==4.1.3
 
 # AI - Yüz Analizi
@@ -32,9 +31,6 @@ protobuf==4.25.8
 # Spotify
 spotipy==2.23.0
 
-# Çeviri
-deep-translator==1.11.4
-langdetect==1.0.9
 
 # Utils
 python-dotenv==1.0.1

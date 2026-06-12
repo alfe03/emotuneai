@@ -1,10 +1,8 @@
 // ─── EmoTuneAI API Layer ─────────────────────────────────────────────────────
 // Docker'da nginx üzerinden proxy, local'de direkt backend
-const API_BASE = window.location.port === "8080"
-  ? ""   // nginx /api/* → backend (same origin, no CORS)
-  : window.location.port === "8000"
-    ? ""  // direkt backend
-    : "http://127.0.0.1:8000"; // fallback
+const API_BASE = window.location.port === "8000"
+  ? ""  // direkt backend üzerinde çalışıyoruz
+  : `http://${window.location.hostname}:8000`; // frontend dev server veya başka port → backend'e yönlendir
 
 class EmoTuneAPI {
   constructor() {
@@ -77,6 +75,13 @@ class EmoTuneAPI {
     return this.request("/api/auth/me");
   }
 
+  async changePassword(currentPassword, newPassword) {
+    return this.request("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    });
+  }
+
   logout() {
     this.clearToken();
   }
@@ -96,6 +101,13 @@ class EmoTuneAPI {
     });
   }
 
+  async analyzeAudio(audioBase64, language = "mixed", contentType = "track", searchQuery = "", genre = "") {
+    return this.request("/api/mood/analyze/audio", {
+      method: "POST",
+      body: JSON.stringify({ audio_base64: audioBase64, language, content_type: contentType, search_query: searchQuery, genre }),
+    });
+  }
+
   async analyzeText(text, language = "mixed", contentType = "track", searchQuery = "", genre = "") {
     return this.request("/api/mood/analyze/text", {
       method: "POST",
@@ -103,10 +115,10 @@ class EmoTuneAPI {
     });
   }
 
-  async manualMood(mood, language = "mixed", contentType = "track", searchQuery = "", genre = "", requestedArtist = null) {
+  async manualMood(mood, language = "mixed", contentType = "track", searchQuery = "", genre = "", requestedArtist = null, noSave = false) {
     return this.request("/api/mood/manual", {
       method: "POST",
-      body: JSON.stringify({ mood, language, content_type: contentType, search_query: searchQuery, genre, requested_artist: requestedArtist }),
+      body: JSON.stringify({ mood, language, content_type: contentType, search_query: searchQuery, genre, requested_artist: requestedArtist, no_save: noSave }),
     });
   }
 
@@ -121,6 +133,13 @@ class EmoTuneAPI {
 
   async getLikedTracks() {
     return this.request("/api/music/liked");
+  }
+
+  async exportPlaylist(moodHistoryId, playlistName) {
+    return this.request("/api/music/export-playlist", {
+      method: "POST",
+      body: JSON.stringify({ mood_history_id: moodHistoryId, playlist_name: playlistName }),
+    });
   }
 
   // ── History ──────────────────────────────────────────────────────────────────

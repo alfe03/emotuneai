@@ -1,16 +1,46 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.routers import auth, mood, music, history
 from app.core.database import engine
 from app.models import models
-
-limiter = Limiter(key_func=get_remote_address)
+from app.core.limiter import limiter
 
 # Veritabanı tablolarını oluştur (Eğer alembic kullanılmıyorsa)
 models.Base.metadata.create_all(bind=engine)
+
+# Otomatik migrasyon: users tablosuna yeni kolonları ekle
+from sqlalchemy import text
+from sqlalchemy.inspection import inspect
+try:
+    inspector = inspect(engine)
+    if inspector.has_table("users"):
+        columns = [col['name'] for col in inspector.get_columns('users')]
+        with engine.connect() as conn:
+            # PostgreSQL ve SQLite uyumlu ALTER TABLE işlemleri
+            trans = conn.begin()
+            try:
+                modified = False
+                if 'spotify_access_token' not in columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN spotify_access_token VARCHAR"))
+                    modified = True
+                if 'spotify_refresh_token' not in columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN spotify_refresh_token VARCHAR"))
+                    modified = True
+                if 'spotify_token_expires_at' not in columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN spotify_token_expires_at INTEGER"))
+                    modified = True
+                if modified:
+                    trans.commit()
+                    print("Veritabanı migrasyonu tamamlandı: Spotify kolonları eklendi.")
+                else:
+                    trans.rollback()
+            except Exception as e:
+                trans.rollback()
+                print(f"Migrasyon hatası oluştu: {e}")
+except Exception as e:
+    print(f"Tablo inceleme hatası: {e}")
 
 app = FastAPI(
     title="EmoTuneAI API",
