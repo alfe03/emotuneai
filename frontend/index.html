@@ -6,7 +6,7 @@
   <meta name="description" content="EmoTuneAI - Yapay zeka destekli duygu tabanlı müzik öneri sistemi. Ruh halinize göre müzik keşfedin.">
   <title>EmoTuneAI – Duygu ile Müzik Keşfet</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='85'>E</text></svg>">
-  <link rel="stylesheet" href="css/style.css?v=8">
+  <link rel="stylesheet" href="css/style.css?v=10">
   <!-- DOMPurify for XSS Protection -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/dompurify/3.1.5/purify.min.js" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
   <!-- Chart.js for beautiful analytics charts -->
@@ -103,7 +103,9 @@
     <!-- Sidebar -->
     <aside id="sidebar" class="sidebar">
       <div class="sidebar-header">
-        <div class="sidebar-logo">EmoTuneAI</div>
+        <div class="sidebar-logo" onclick="window.location.reload()" style="cursor: pointer;">
+          <img class="app-logo" src="./assets/logo.png" alt="EmoTune AI" style="height: 70px; width: auto; object-fit: contain;">
+        </div>
         <button id="btn-toggle-sidebar" class="sidebar-toggle-btn" title="Menüyü Daralt/Genişlet">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
             <line x1="3" y1="12" x2="21" y2="12"></line>
@@ -126,6 +128,14 @@
           <span class="nav-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg></span>
           <span class="nav-text">Beğenilenler</span>
         </button>
+        <button class="nav-item" data-nav="playlists">
+          <span class="nav-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg></span>
+          <span class="nav-text">Çalma Listelerim</span>
+        </button>
+        <button class="nav-item" data-nav="profile">
+          <span class="nav-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg></span>
+          <span class="nav-text">Profil</span>
+        </button>
       </nav>
 
       <div class="sidebar-footer">
@@ -133,20 +143,11 @@
           <div class="user-avatar" id="user-avatar">U</div>
           <span class="user-name" id="user-greeting">Kullanıcı</span>
         </div>
-        <div class="spotify-badge-wrapper" id="sidebar-spotify-wrapper">
-          <div class="spotify-status">
-            <div class="spotify-dot" id="spotify-status-dot"></div>
-            <span>Spotify</span>
-          </div>
-          <button class="btn-link-spotify" id="btn-sidebar-link-spotify">
-            Bağla
-          </button>
-        </div>
-        <button class="btn-change-password" id="btn-open-change-password">
-          <span class="nav-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg></span>
-          <span class="nav-text">Şifre Değiştir</span>
+        <button class="btn-theme-toggle desktop-only" id="btn-theme-toggle" style="display: flex; align-items: center; gap: 0.6rem; width: 100%; padding: 0.65rem 1rem; border: none; border-radius: var(--radius-sm); background: transparent; color: var(--text-muted); font-family: inherit; font-size: 0.85rem; cursor: pointer; transition: var(--transition);">
+          <span class="nav-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="theme-icon"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg></span>
+          <span class="nav-text" id="theme-text">Aydınlık Mod</span>
         </button>
-        <button class="btn-logout" id="btn-logout">
+        <button class="btn-logout desktop-only" id="btn-logout">
           <span class="nav-icon"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg></span>
           <span class="nav-text">Çıkış Yap</span>
         </button>
@@ -156,6 +157,13 @@
     <!-- Main Content -->
     <main class="main-content">
 
+      <!-- Mobile Topbar -->
+      <div class="mobile-topbar mobile-only">
+        <div class="logo" onclick="window.location.reload()" style="cursor: pointer;">
+          <img class="app-logo" src="./assets/logo.png" alt="EmoTune AI" style="height: 60px; width: auto; object-fit: contain;">
+        </div>
+      </div>
+
       <!-- ── Mood Page ──────────────────────────────────────────────────── -->
       <div id="page-mood" class="page">
         <h1 class="page-title">Nasıl Hissediyorsunuz?</h1>
@@ -163,34 +171,42 @@
 
         <!-- Mood analysis tabs -->
         <div class="mood-tabs">
-          <button class="mood-tab active" data-mood-tab="text">
-            ✍️ Metin
+          <button class="mood-tab active" data-mood-tab="text" style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"></path><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"></path></svg>
+            Metin
           </button>
-          <button class="mood-tab" data-mood-tab="face">
-            📸 Yüz
+          <button class="mood-tab" data-mood-tab="face" style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+            Yüz
           </button>
-          <button class="mood-tab" data-mood-tab="voice">
-            🎙️ Ses
-          </button>
-          <button class="mood-tab" data-mood-tab="manual">
-            🎛️ Manuel
+          <button class="mood-tab" data-mood-tab="voice" style="display: flex; align-items: center; justify-content: center; gap: 6px;">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+            Ses
           </button>
         </div>
 
         <!-- Text Panel -->
         <div id="panel-text" class="mood-panel active">
-          <div class="text-area-wrapper">
-            <textarea
-              id="mood-text-input"
-              class="mood-textarea"
-              placeholder="Bugün nasıl hissediyorsunuz? Duygularınızı yazın...&#10;&#10;Örnek: Bugün çok enerjik ve mutlu hissediyorum!"
-              rows="5"
-            ></textarea>
+          <div id="text-input-container">
+            <div class="text-area-wrapper">
+              <textarea
+                id="mood-text-input"
+                class="mood-textarea"
+                placeholder="Bugün nasıl hissediyorsunuz? Duygularınızı yazın...&#10;&#10;Örnek: Bugün çok enerjik ve mutlu hissediyorum!"
+                rows="5"
+              ></textarea>
+            </div>
+            <div class="text-submit">
+              <button class="btn btn-primary" id="btn-analyze-text">
+                Analiz Et
+              </button>
+            </div>
           </div>
-          <div class="text-submit">
-            <button class="btn btn-primary" id="btn-analyze-text">
-              Analiz Et
-            </button>
+          <div id="text-restart-container" style="display: none; padding: 2rem 0;">
+             <div style="display: flex; gap: 1rem; justify-content: center;">
+               <button class="btn btn-primary" onclick="resetTextPanel(false)" style="background: var(--bg-card); color: var(--text-color); border: 1px solid var(--border-color);">Metni Düzenle</button>
+               <button class="btn btn-primary" onclick="resetTextPanel(true)">Yeni Metin Yaz</button>
+             </div>
           </div>
         </div>
 
@@ -217,7 +233,7 @@
 
         <!-- Voice Panel -->
         <div id="panel-voice" class="mood-panel">
-          <div class="voice-panel-container">
+          <div id="voice-input-container" class="voice-panel-container">
             <div class="mic-wrapper">
               <button class="btn-mic" id="btn-mic-record" title="Ses Kaydı Başlat">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -241,31 +257,8 @@
               <div class="visualizer-bar"></div>
             </div>
           </div>
-        </div>
-
-        <!-- Manual Panel -->
-        <div id="panel-manual" class="mood-panel">
-          <div class="mood-grid">
-            <button class="mood-card" data-mood="happy">
-              <span class="mood-emoji">😄</span>
-              <span class="mood-name">Mutlu</span>
-            </button>
-            <button class="mood-card" data-mood="sad">
-              <span class="mood-emoji">😢</span>
-              <span class="mood-name">Üzgün</span>
-            </button>
-            <button class="mood-card" data-mood="angry">
-              <span class="mood-emoji">😠</span>
-              <span class="mood-name">Kızgın</span>
-            </button>
-            <button class="mood-card" data-mood="neutral">
-              <span class="mood-emoji">😐</span>
-              <span class="mood-name">Nötr</span>
-            </button>
-            <button class="mood-card" data-mood="surprise">
-              <span class="mood-emoji">😮</span>
-              <span class="mood-name">Şaşkın</span>
-            </button>
+          <div id="voice-restart-container" style="display: none; text-align: center; padding: 2rem 0;">
+             <button class="btn btn-primary" onclick="resetVoicePanel()">Yeniden Analiz Et</button>
           </div>
         </div>
 
@@ -349,6 +342,87 @@
         <div id="liked-list" class="tracks-grid"></div>
       </div>
 
+      <!-- ── Saved Playlists Page ───────────────────────────────────────── -->
+      <div id="page-playlists" class="page">
+        <h1 class="page-title">Çalma Listelerim</h1>
+        <p class="page-subtitle">Uygulama içine kaydettiğiniz çalma listeleri.</p>
+        <div id="saved-playlists-container" class="playlists-grid"></div>
+      </div>
+      <!-- ── Profile Page ───────────────────────────────────────────────── -->
+      <div id="page-profile" class="page">
+        <h1 class="page-title">Profil</h1>
+        <p class="page-subtitle">Hesap bilgilerinizi ve ayarlarınızı yönetin.</p>
+        
+        <div class="profile-container" style="display: flex; flex-direction: column; gap: 2rem; max-width: 600px;">
+          
+          <!-- Avatar and Name Update -->
+          <div class="card profile-card" style="padding: 1.5rem;">
+            <h3 style="margin-bottom: 1rem;">Kişisel Bilgiler</h3>
+            <div style="display: flex; gap: 1.5rem; align-items: center; margin-bottom: 1rem;">
+              <div class="user-avatar-wrapper" style="position: relative; cursor: pointer; width: 80px; height: 80px; border-radius: 50%; overflow: hidden; display: flex; flex-shrink: 0;" onclick="document.getElementById('profile-avatar-file').click()">
+                <div class="user-avatar" id="profile-avatar-preview" style="width: 100%; height: 100%; font-size: 2rem; margin: 0;">U</div>
+                <div class="avatar-edit-overlay" style="position: absolute; inset: 0; background: rgba(0, 0, 0, 0.6); display: flex; flex-direction: column; align-items: center; justify-content: center; color: #fff; font-size: 0.75rem; font-weight: 500; transition: opacity 0.2s; z-index: 2;">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 2px;"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path><circle cx="12" cy="13" r="4"></circle></svg>
+                  Değiştir
+                </div>
+                <input type="file" id="profile-avatar-file" accept="image/*" style="display: none;">
+              </div>
+              <div style="flex: 1;">
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="profile-username">Kullanıcı Adı</label>
+                  <input type="text" id="profile-username" class="form-input" placeholder="İsminiz">
+                </div>
+              </div>
+            </div>
+            <button class="btn btn-primary" id="btn-save-profile" style="width: auto;">Bilgileri Kaydet</button>
+          </div>
+
+          <!-- Spotify Integration -->
+          <div class="card profile-card" style="padding: 1.5rem;">
+            <h3 style="margin-bottom: 1rem;">Spotify Bağlantısı</h3>
+            <div style="display: flex; align-items: center; justify-content: space-between; background: var(--bg-primary); padding: 1rem; border-radius: var(--radius-md); border: 1px solid var(--border);">
+              <div style="display: flex; align-items: center; gap: 1rem;">
+                <div class="spotify-dot" id="profile-spotify-dot" style="width: 12px; height: 12px;"></div>
+                <span id="profile-spotify-text">Bağlantı durumu kontrol ediliyor...</span>
+              </div>
+              <button class="btn-link-spotify" id="btn-profile-link-spotify" style="width: auto;">Bağla</button>
+            </div>
+            <p style="font-size: 0.85rem; color: var(--text-muted); margin-top: 0.8rem;">
+              Spotify hesabınızı bağlayarak analiz sonuçlarınıza uygun çalma listeleri oluşturabilirsiniz.
+            </p>
+          </div>
+
+          <!-- Change Password -->
+          <div class="card profile-card" style="padding: 1.5rem;">
+            <h3 style="margin-bottom: 1rem;">Şifre Değiştir</h3>
+            <div class="form-group" id="profile-group-current-password">
+              <label for="profile-current-password">Mevcut Şifre</label>
+              <input type="password" id="profile-current-password" class="form-input" placeholder="••••••••">
+            </div>
+            <div class="form-group" style="margin-bottom: 1rem;">
+              <label for="profile-new-password">Yeni Şifre</label>
+              <input type="password" id="profile-new-password" class="form-input" placeholder="En az 6 karakter" required minlength="6">
+            </div>
+            <p id="profile-password-error" class="form-error"></p>
+            <button class="btn btn-primary" id="btn-save-password" style="width: auto;">Şifreyi Güncelle</button>
+          </div>
+          
+          <!-- Mobile Only Actions -->
+          <div class="card profile-card mobile-only" style="padding: 1.5rem; display: none;">
+            <h3 style="margin-bottom: 1rem;">Uygulama Ayarları</h3>
+            <button class="btn btn-theme-toggle-mobile" id="btn-theme-toggle-mobile" style="margin-bottom: 1rem; width: 100%; display: flex; align-items: center; justify-content: center; gap: 0.6rem; padding: 0.85rem; border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--bg-primary); color: var(--text-primary); font-family: inherit; font-size: 0.95rem; font-weight: 600; cursor: pointer;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" id="theme-icon-mobile"><circle cx="12" cy="12" r="5"></circle><line x1="12" y1="1" x2="12" y2="3"></line><line x1="12" y1="21" x2="12" y2="23"></line><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line><line x1="1" y1="12" x2="3" y2="12"></line><line x1="21" y1="12" x2="23" y2="12"></line><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line></svg>
+              <span id="theme-text-mobile">Aydınlık Mod</span>
+            </button>
+            <button class="btn-logout-mobile" id="btn-logout-mobile" style="width: 100%; padding: 0.85rem; border: none; border-radius: var(--radius-sm); background: rgba(255, 82, 82, 0.1); color: var(--accent-intense); font-family: inherit; font-size: 0.95rem; font-weight: 600; display: flex; align-items: center; justify-content: center; gap: 0.6rem; cursor: pointer;">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path><polyline points="16 17 21 12 16 7"></polyline><line x1="21" y1="12" x2="9" y2="12"></line></svg>
+              Çıkış Yap
+            </button>
+          </div>
+          
+        </div>
+      </div>
+
     </main>
     
     <!-- Spotify In-App Player -->
@@ -364,51 +438,23 @@
   <div class="custom-modal-backdrop" id="spotify-export-modal">
     <div class="custom-modal-card">
       <div class="modal-header">
-        <h3 class="modal-title">Spotify'a Aktar</h3>
+        <h3 class="modal-title">Listeyi Kaydet / Aktar</h3>
         <button class="modal-close-btn" id="btn-close-export-modal">
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
         </button>
       </div>
       <div class="modal-body">
-        <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">Seçtiğiniz şarkılar Spotify kütüphanenizde yeni bir çalma listesi olarak oluşturulacaktır.</p>
+        <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">Bu listeyi EmoTune uygulamasına kaydedebilir veya Spotify kütüphanenize yeni bir çalma listesi olarak aktarabilirsiniz.</p>
         <div class="form-group">
           <label for="playlist-name-input">Çalma Listesi Adı</label>
           <input type="text" id="playlist-name-input" class="form-input" placeholder="Çalma listesi ismi girin...">
         </div>
+        <p id="modal-error-message" style="color: var(--color-error); font-size: 0.9rem; margin-top: 0.5rem; display: none;"></p>
       </div>
-      <div class="modal-footer">
-        <button class="btn btn-logout" id="btn-cancel-export" style="margin: 0; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); width: auto;">İptal</button>
-        <button class="btn btn-primary" id="btn-confirm-export" style="width: auto;">Oluştur ve Aktar</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Change Password Modal -->
-  <div class="custom-modal-backdrop" id="change-password-modal">
-    <div class="custom-modal-card">
-      <div class="modal-header">
-        <h3 class="modal-title" id="change-password-title">Şifre Değiştir</h3>
-        <button class="modal-close-btn" id="btn-close-password-modal">
-          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
-        </button>
-      </div>
-      <div class="modal-body">
-        <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1.2rem;" id="change-password-description">
-          Hesabınız için şifrenizi güncelleyin.
-        </p>
-        <div class="form-group" id="group-current-password">
-          <label for="change-current-password">Mevcut Şifre</label>
-          <input type="password" id="change-current-password" class="form-input" placeholder="••••••••">
-        </div>
-        <div class="form-group">
-          <label for="change-new-password">Yeni Şifre</label>
-          <input type="password" id="change-new-password" class="form-input" placeholder="En az 6 karakter" required minlength="6">
-        </div>
-        <p id="change-password-error" class="form-error"></p>
-      </div>
-      <div class="modal-footer">
-        <button class="btn" id="btn-cancel-password" style="margin: 0; background: var(--bg-secondary); border: 1px solid var(--border); color: var(--text-secondary); width: auto;">İptal</button>
-        <button class="btn btn-primary" id="btn-confirm-password" style="width: auto;">Kaydet</button>
+      <div class="modal-footer" style="display: flex; flex-direction: column; gap: 0.8rem; width: 100%;">
+        <button class="btn btn-primary" id="btn-confirm-export" style="width: 100%; margin: 0;">Spotify'a Aktar</button>
+        <button class="btn btn-secondary" id="btn-save-internal" style="width: 100%; margin: 0; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border);">Uygulamaya Kaydet</button>
+        <button class="btn btn-logout" id="btn-cancel-export" style="width: 100%; margin: 0; background: transparent; border: none; color: var(--text-secondary);">İptal</button>
       </div>
     </div>
   </div>
@@ -417,7 +463,7 @@
   <div id="toast-container" class="toast-container"></div>
 
   <!-- Scripts -->
-  <script src="js/api.js?v=15"></script>
-  <script src="js/app.js?v=15"></script>
+  <script src="js/api.js?v=16"></script>
+  <script src="js/app.js?v=16"></script>
 </body>
 </html>

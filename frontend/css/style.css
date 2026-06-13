@@ -462,6 +462,10 @@ body {
   color: var(--text-primary);
 }
 
+body.theme-light .app-logo {
+  filter: invert(1) hue-rotate(180deg);
+}
+
 .sidebar.collapsed .sidebar-logo {
   display: none;
 }
@@ -482,6 +486,7 @@ body {
   padding: 0.5rem;
   border-radius: var(--radius-sm);
   transition: var(--transition);
+  margin-top: 6px; /* Görsel hizalama için hafif aşağı itildi */
 }
 
 .sidebar-toggle-btn:hover {
@@ -644,6 +649,20 @@ body {
   font-size: 0.85rem;
   cursor: pointer;
   transition: var(--transition);
+}
+
+.sidebar.collapsed .btn-theme-toggle {
+  justify-content: center;
+  padding: 0.65rem 0;
+}
+
+.sidebar.collapsed .btn-theme-toggle .nav-text {
+  display: none;
+}
+
+.btn-theme-toggle:hover {
+  background: var(--primary-dim);
+  color: var(--primary) !important;
 }
 
 .sidebar.collapsed .btn-change-password {
@@ -2434,4 +2453,788 @@ body[data-mood="chill"] .blob-2 { background-color: rgba(26, 188, 156, 0.2); }
 
 body[data-mood="calm"] .blob-1 { background-color: rgba(155, 89, 182, 0.2); }
 body[data-mood="calm"] .blob-2 { background-color: rgba(142, 68, 173, 0.2); }
-
+
+/* ── Custom Scrollbar ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.4);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.6);
+}
+
+/* ── Light Theme Exceptions for Track Card and Modals ─────────────────────── */
+body.theme-light .track-card:hover {
+  background: var(--bg-primary);
+}
+
+/* ── Profile Page ─────────────────────────────────────────────────────────── */
+.profile-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+body.theme-light .profile-card {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
+.profile-card h3 {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+#profile-avatar-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary);
+  color: white;
+  border-radius: 50%;
+  font-weight: 600;
+  overflow: hidden;
+}
+
+/* ── Light Theme ──────────────────────────────────────────────────────────── */
+body.theme-light {
+  --bg-primary: #f5f5f7;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-elevated: #f0f0f0;
+  --bg-input: #f9f9f9;
+  
+  --text-primary: #111111;
+  --text-secondary: #555555;
+  --text-muted: #888888;
+  
+  --border: rgba(0, 0, 0, 0.1);
+  --border-hover: rgba(0, 0, 0, 0.2);
+  --overlay: rgba(255, 255, 255, 0.7);
+  
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.12);
+  
+  --bg-gradient-2: #eaeaf0;
+}
+
+/* Light Theme overrides for Moods (Pastel backgrounds instead of dark tinted) */
+body.theme-light.theme-energetic {
+  --bg-primary: #fffcf5;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.95);
+  --bg-elevated: #fff8eb;
+  --bg-input: #fffefb;
+  --bg-gradient-2: #fff2d9;
+}
+
+body.theme-light.theme-chill {
+  --bg-primary: #f2fcf6;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.95);
+  --bg-elevated: #e6faed;
+  --bg-input: #f9fefa;
+  --bg-gradient-2: #dcf5e6;
+}
+
+body.theme-light.theme-melancholic {
+  --bg-primary: #f4f6fa;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.95);
+  --bg-elevated: #eaeff8;
+  --bg-input: #fbfbfe;
+  --bg-gradient-2: #e0e7f5;
+}
+
+body.theme-light.theme-intense {
+  --bg-primary: #fcf4f4;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.95);
+  --bg-elevated: #fae8e8;
+  --bg-input: #fef9f9;
+  --bg-gradient-2: #f5dcdc;
+}
+
+body.theme-light.theme-calm {
+  --bg-primary: #f2f8fa;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.95);
+  --bg-elevated: #e6f2f6;
+  --bg-input: #f9fbfd;
+  --bg-gradient-2: #dceef2;
+}
+
+/* Light mode specific element adjustments */
+body.theme-light .btn-primary {
+  color: #fff; /* Keep text white on primary button */
+}
+body.theme-light .visualizer-bar {
+  background-color: var(--primary); /* Force primary color on light mode instead of white */
+}
+body.theme-light #voice-visualizer-bars .visualizer-bar {
+  background-color: var(--primary);
+}
+.polaroid-card {
+  background: #fff;
+  padding: 10px 10px 25px 10px;
+  border-radius: 4px;
+  box-shadow: 0 15px 35px rgba(0,0,0,0.4);
+  transform: rotate(-3deg);
+  transition: transform 0.3s ease;
+  position: relative;
+  max-width: 250px;
+}
+
+.polaroid-card:hover {
+  transform: rotate(0deg) scale(1.05);
+}
+
+.polaroid-img-container {
+  width: 100%;
+  border-radius: 2px;
+  overflow: hidden;
+  position: relative;
+  background: #000;
+}
+
+.polaroid-img {
+  width: 100%;
+  height: auto;
+  display: block;
+  filter: grayscale(20%);
+}
+
+.polaroid-tint {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  mix-blend-mode: overlay;
+  opacity: 0.6;
+}
+
+.polaroid-caption {
+  text-align: center;
+  color: #333;
+  font-family: 'Caveat', 'Comic Sans MS', cursive, sans-serif;
+  font-size: 1.2rem;
+  font-weight: bold;
+  margin-top: 15px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+}
+
+/* Dinamik Arka Plan Renkleri (Aurora Blobs) */
+body[data-mood="energetic"] .blob-1 { background-color: rgba(255, 82, 82, 0.3); }
+body[data-mood="energetic"] .blob-2 { background-color: rgba(255, 165, 0, 0.2); }
+
+body[data-mood="melancholic"] .blob-1 { background-color: rgba(64, 115, 255, 0.2); }
+body[data-mood="melancholic"] .blob-2 { background-color: rgba(30, 60, 150, 0.2); }
+
+body[data-mood="intense"] .blob-1 { background-color: rgba(220, 20, 60, 0.3); }
+body[data-mood="intense"] .blob-2 { background-color: rgba(139, 0, 0, 0.3); }
+
+body[data-mood="chill"] .blob-1 { background-color: rgba(46, 204, 113, 0.2); }
+body[data-mood="chill"] .blob-2 { background-color: rgba(26, 188, 156, 0.2); }
+
+body[data-mood="calm"] .blob-1 { background-color: rgba(155, 89, 182, 0.2); }
+body[data-mood="calm"] .blob-2 { background-color: rgba(142, 68, 173, 0.2); }
+
+/* ── Custom Scrollbar ─────────────────────────────────────────────────────── */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(150, 150, 150, 0.4);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(150, 150, 150, 0.6);
+}
+
+/* ── Light Theme Exceptions for Track Card and Modals ─────────────────────── */
+body.theme-light .track-card:hover {
+  background: var(--bg-primary);
+}
+
+/* ── Profile Page ─────────────────────────────────────────────────────────── */
+.profile-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+}
+body.theme-light .profile-card {
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+}
+.profile-card h3 {
+  font-size: 1.1rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+#profile-avatar-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--primary);
+  color: white;
+  border-radius: 50%;
+  font-weight: 600;
+  overflow: hidden;
+}
+
+/* ── Light Theme ──────────────────────────────────────────────────────────── */
+body.theme-light {
+  --bg-primary: #f5f5f7;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-elevated: #f0f0f0;
+  --bg-input: #f9f9f9;
+  
+  --text-primary: #111111;
+  --text-secondary: #555555;
+  --text-muted: #888888;
+  
+  --border: rgba(0, 0, 0, 0.1);
+  --border-hover: rgba(0, 0, 0, 0.2);
+  --overlay: rgba(255, 255, 255, 0.7);
+  
+  --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 16px 40px rgba(0, 0, 0, 0.12);
+  
+  --bg-gradient-2: #eaeaf0;
+}
+
+/* Light Theme overrides for Moods (Pastel backgrounds instead of dark tinted) */
+body.theme-light.theme-energetic {
+  --bg-primary: #fffcf5;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.95);
+  --bg-elevated: #fff8eb;
+  --bg-input: #fffefb;
+  --bg-gradient-2: #fff2d9;
+}
+
+body.theme-light.theme-chill {
+  --bg-primary: #f2fcf6;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.95);
+  --bg-elevated: #e6faed;
+  --bg-input: #f9fefa;
+  --bg-gradient-2: #dcf5e6;
+}
+
+body.theme-light.theme-melancholic {
+  --bg-primary: #f4f6fa;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.95);
+  --bg-elevated: #eaeff8;
+  --bg-input: #fbfbfe;
+  --bg-gradient-2: #e0e7f5;
+}
+
+body.theme-light.theme-intense {
+  --bg-primary: #fcf4f4;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.95);
+  --bg-elevated: #fae8e8;
+  --bg-input: #fef9f9;
+  --bg-gradient-2: #f5dcdc;
+}
+
+body.theme-light.theme-calm {
+  --bg-primary: #f2f8fa;
+  --bg-secondary: #ffffff;
+  --bg-card: rgba(255, 255, 255, 0.95);
+  --bg-elevated: #e6f2f6;
+  --bg-input: #f9fbfd;
+  --bg-gradient-2: #dceef2;
+}
+
+/* Light mode specific element adjustments */
+body.theme-light .btn-primary {
+  color: #fff; /* Keep text white on primary button */
+}
+body.theme-light .visualizer-bar {
+  background-color: var(--primary); /* Force primary color on light mode instead of white */
+}
+body.theme-light #voice-visualizer-bars .visualizer-bar {
+  background-color: var(--primary);
+}
+
+.user-avatar-wrapper:hover .avatar-edit-overlay {
+  opacity: 1 !important;
+}
+
+.avatar-edit-overlay {
+  opacity: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════ */
+/*  MOBILE RESPONSIVE LAYOUT                                                 */
+/* ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  /* Native App Feel */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  input, textarea, select {
+    user-select: auto;
+    -webkit-user-select: auto;
+  }
+
+  /* Utility Classes */
+  .desktop-only { display: none !important; }
+  .mobile-only { 
+    display: flex !important; 
+    flex-direction: column; 
+    gap: 0.8rem; 
+  }
+
+  /* Mobile Topbar */
+  .mobile-topbar {
+    width: 100%;
+    height: 60px;
+    display: flex !important;
+    flex-direction: row !important;
+    align-items: center;
+    justify-content: center; /* Center the logo */
+    padding: 0 1rem;
+    margin-bottom: 1rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    background: transparent;
+  }
+  .mobile-topbar .logo {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .mobile-topbar .logo-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: var(--radius-sm);
+    background: linear-gradient(135deg, var(--primary), var(--secondary));
+    color: white;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 800;
+    font-size: 1.2rem;
+  }
+  .mobile-topbar h2 {
+    font-size: 1.4rem;
+    font-weight: 800;
+    background: linear-gradient(90deg, var(--text-primary), var(--primary));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin: 0;
+  }
+
+  /* App Screen */
+  .app-screen {
+    flex-direction: column;
+    padding-bottom: 75px; /* Space for bottom nav + safe area */
+  }
+
+  /* Main Content */
+  .main-content {
+    margin-left: 0 !important;
+    width: 100%;
+    padding: 1.5rem 1rem;
+    min-height: calc(100vh - 75px);
+  }
+
+  /* Sidebar to Bottom Nav */
+  .sidebar {
+    width: 100%;
+    height: 75px; /* Taller for safe area */
+    min-height: 75px;
+    padding: 0;
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    top: auto;
+    border-right: none;
+    border-top: 1px solid var(--border);
+    flex-direction: row;
+    z-index: 1000;
+    box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4);
+    background: var(--bg-secondary);
+    padding-bottom: env(safe-area-inset-bottom, 10px); /* iPhone Home Bar Safe Area */
+  }
+
+  /* Hide Desktop Sidebar Elements */
+  .sidebar-header,
+  .sidebar-footer .user-info {
+    display: none !important;
+  }
+
+  /* Adjust Nav Items */
+  .sidebar-nav {
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 0;
+    padding: 0 0.5rem;
+    height: 100%;
+  }
+
+  .nav-item {
+    flex: 1;
+    height: 100%;
+    flex-direction: column;
+    gap: 0.3rem;
+    padding: 0.4rem 0;
+    font-size: 0.7rem;
+    border-radius: 0;
+    background: transparent !important;
+    justify-content: center;
+    align-items: center;
+    width: auto;
+    touch-action: manipulation;
+  }
+
+  .nav-item * {
+    pointer-events: none;
+  }
+
+  .nav-item:hover, .nav-item.active {
+    background: transparent !important;
+  }
+
+  .nav-item.active {
+    color: var(--primary);
+  }
+
+  .nav-item svg, .nav-item .nav-icon {
+    width: 24px;
+    height: 24px;
+    font-size: 1.3rem;
+  }
+
+  .nav-item .nav-text {
+    display: block;
+    font-size: 0.65rem;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+    text-align: center;
+  }
+
+  /* Simplify Sidebar Footer */
+  .sidebar-footer {
+    display: none; /* Hide entirely since buttons moved to profile */
+  }
+
+  /* Search & Filter Bar Mobile */
+  .results-filter-bar {
+    display: flex;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.8rem;
+    padding: 0.5rem 0;
+  }
+  
+  .results-search-box {
+    width: 100%;
+    display: flex;
+    gap: 0.5rem;
+  }
+  
+  .results-search-box input {
+    flex: 1;
+  }
+  
+  .filter-group {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    justify-content: center;
+    width: 100%;
+  }
+  
+  .filter-divider {
+    display: none; /* Remove vertical dividers */
+  }
+
+  .filter-chip {
+    flex: 1;
+    text-align: center;
+    min-width: 80px;
+  }
+
+  /* Fix for Uygulama Ayarları Card margins */
+  .profile-card.mobile-only h3 {
+    margin-bottom: 0.2rem !important;
+  }
+  .profile-card.mobile-only .btn {
+    margin-bottom: 0 !important;
+  }
+
+  /* Beautiful Textarea for Mobile */
+  .mood-textarea {
+    width: 100%;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 1.2rem;
+    font-size: 1rem;
+    color: var(--text-primary);
+    font-family: inherit;
+    line-height: 1.6;
+    resize: none;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.2);
+    transition: all 0.3s ease;
+    margin-bottom: 1rem;
+  }
+
+  body.theme-light .mood-textarea {
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.05);
+  }
+
+  .mood-textarea:focus {
+    outline: none;
+    border-color: var(--primary);
+    background: var(--bg-card);
+  }
+
+  .mood-textarea::placeholder {
+    color: #a0a0a0;
+    font-weight: 400;
+  }
+
+  /* Spotify Player Fix */
+  .spotify-player-container {
+    bottom: 85px; /* Above bottom nav */
+    right: 10px;
+    left: 10px;
+    width: auto;
+  }
+
+  /* Modals */
+  .modal-content {
+    width: 95%;
+    padding: 1.5rem;
+  }
+
+  /* History Grid / Playlist Grid */
+  .history-grid, .playlists-grid {
+    grid-template-columns: 1fr;
+  }
+}/* �� NEW RESULTS FILTER BAR DESIGN (Overriding previous) ���������������� */
+.results-filter-bar {
+  display: flex !important;
+  align-items: center !important;
+  gap: 1rem !important;
+  margin-bottom: 2rem !important;
+  padding: 0.75rem 1rem !important;
+  background: rgba(255, 255, 255, 0.03) !important;
+  backdrop-filter: blur(12px) !important;
+  -webkit-backdrop-filter: blur(12px) !important;
+  border: 1px solid rgba(255, 255, 255, 0.08) !important;
+  border-radius: 100px !important;
+  flex-wrap: wrap !important;
+  box-shadow: 0 4px 20px rgba(0,0,0,0.1) !important;
+}
+
+.results-search-box {
+  display: flex !important;
+  align-items: center !important;
+  gap: 0.5rem !important;
+  flex: 1 !important;
+  min-width: 200px !important;
+}
+
+.results-search-box .form-input-sm {
+  padding: 0.5rem 1rem !important;
+  font-size: 0.85rem !important;
+  height: 38px !important;
+  border-radius: 100px !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.05) !important;
+  transition: all 0.3s ease !important;
+}
+
+.results-search-box .form-input-sm:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px var(--primary-dim) !important;
+}
+
+.results-search-box .btn-sm {
+  padding: 0.5rem 1rem !important;
+  font-size: 0.85rem !important;
+  height: 38px !important;
+  border-radius: 100px !important;
+  font-weight: 600 !important;
+  background: var(--primary) !important;
+  color: #fff !important;
+  border: none !important;
+  box-shadow: 0 2px 8px var(--primary-glow) !important;
+  transition: all 0.3s ease !important;
+}
+.results-search-box .btn-sm:hover {
+  transform: translateY(-1px) !important;
+  box-shadow: 0 4px 12px var(--primary-glow) !important;
+}
+
+.filter-group {
+  display: flex !important;
+  gap: 0.25rem !important;
+  background: rgba(0,0,0,0.1) !important;
+  padding: 0.25rem !important;
+  border-radius: 100px !important;
+  border: 1px solid rgba(255,255,255,0.05) !important;
+}
+
+.filter-divider {
+  display: none !important;
+}
+
+.filter-chip {
+  padding: 0.4rem 1rem !important;
+  border: none !important;
+  border-radius: 100px !important;
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+  font-family: inherit !important;
+  font-size: 0.85rem !important;
+  font-weight: 500 !important;
+  cursor: pointer !important;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1) !important;
+  white-space: nowrap !important;
+}
+
+.filter-chip:hover {
+  color: var(--text-primary) !important;
+  background: rgba(255, 255, 255, 0.05) !important;
+}
+
+.filter-chip.active {
+  color: #fff !important;
+  font-weight: 600 !important;
+  background: var(--primary) !important;
+  box-shadow: 0 2px 10px var(--primary-glow) !important;
+  transform: translateY(-1px) !important;
+}
+
+.genre-select-styled {
+  height: 38px !important;
+  border-radius: 100px !important;
+  padding: 0 1rem !important;
+  background: var(--bg-card) !important;
+  border: 1px solid var(--border) !important;
+  font-size: 0.85rem !important;
+  font-weight: 500 !important;
+  color: var(--text-primary) !important;
+  transition: all 0.3s ease !important;
+}
+.genre-select-styled:focus {
+  border-color: var(--primary) !important;
+  box-shadow: 0 0 0 3px var(--primary-dim) !important;
+}
+/* �� CUSTOM GENRE DROPDOWN ���������������� */
+.custom-genre-dropdown {
+  position: relative;
+  min-width: 150px;
+  user-select: none;
+}
+.custom-genre-dropdown .dropdown-selected {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 38px;
+  padding: 0 1rem;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.05);
+}
+.custom-genre-dropdown.open .dropdown-selected {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px var(--primary-dim);
+}
+.custom-genre-dropdown .dropdown-options {
+  position: absolute;
+  top: calc(100% + 8px);
+  left: 0;
+  width: 100%;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 0.5rem;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-10px);
+  transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  max-height: 300px;
+  overflow-y: auto;
+}
+.custom-genre-dropdown.open .dropdown-options {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(0);
+}
+.custom-genre-dropdown .dropdown-option {
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  margin-bottom: 2px;
+}
+.custom-genre-dropdown .dropdown-option:last-child {
+  margin-bottom: 0;
+}
+.custom-genre-dropdown .dropdown-option:hover {
+  background: rgba(255,255,255,0.05);
+  color: var(--text-primary);
+}
+.custom-genre-dropdown .dropdown-option.active {
+  background: var(--primary);
+  color: #fff;
+  box-shadow: 0 2px 10px var(--primary-glow);
+}
+/* Scrollbar styling for dropdown */
+.custom-genre-dropdown .dropdown-options::-webkit-scrollbar {
+  width: 6px;
+}
+.custom-genre-dropdown .dropdown-options::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.2);
+  border-radius: 10px;
+}
+
+.results-filter-bar { position: relative !important; z-index: 500 !important; }

@@ -30,7 +30,7 @@ services:
       - ./backend/.env
     environment:
       DATABASE_URL: postgresql://postgres:password@db:5432/emotune
-      CORS_ORIGINS: http://localhost:8080,http://127.0.0.1:8080
+      CORS_ORIGINS: "*"
       FRONTEND_URL: http://localhost:8080/index.html
       SPOTIFY_REDIRECT_URI: http://127.0.0.1:8000/api/auth/spotify/callback
     depends_on:

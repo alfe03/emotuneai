@@ -82,6 +82,36 @@ class EmoTuneAPI {
     });
   }
 
+  async updateProfile(username, avatarUrl) {
+    return this.request("/api/auth/update-profile", {
+      method: "PUT",
+      body: JSON.stringify({ username, avatar_url: avatarUrl }),
+    });
+  }
+
+  async uploadAvatar(file) {
+    const formData = new FormData();
+    formData.append("file", file);
+    
+    const headers = {};
+    if (this.token) {
+      headers["Authorization"] = `Bearer ${this.token}`;
+    }
+    
+    const res = await fetch(`${API_BASE}/api/auth/upload-avatar`, {
+      method: "POST",
+      headers,
+      body: formData
+    });
+    
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Bir hata oluştu." }));
+      throw new Error(err.detail || `HTTP ${res.status}`);
+    }
+    
+    return res.json();
+  }
+
   logout() {
     this.clearToken();
   }
@@ -142,9 +172,38 @@ class EmoTuneAPI {
     });
   }
 
+  async saveInternalPlaylist(moodHistoryId, playlistName) {
+    return this.request("/api/music/save-internal-playlist", {
+      method: "POST",
+      body: JSON.stringify({ mood_history_id: moodHistoryId, playlist_name: playlistName }),
+    });
+  }
+
+  async saveInternalPlaylist(moodHistoryId, playlistName) {
+    return this.request("/api/music/save-internal-playlist", {
+      method: "POST",
+      body: JSON.stringify({ mood_history_id: moodHistoryId, playlist_name: playlistName }),
+    });
+  }
+
+  async getSavedPlaylists() {
+    return this.request("/api/music/saved-playlists");
+  }
+
+  async deleteSavedPlaylist(id) {
+    return this.request(`/api/music/saved-playlists/${id}`, { method: "DELETE" });
+  }
+
+  async exportSavedPlaylist(savedPlaylistId) {
+    return this.request("/api/music/export-saved-playlist", {
+      method: "POST",
+      body: JSON.stringify({ saved_playlist_id: savedPlaylistId }),
+    });
+  }
+
   // ── History ──────────────────────────────────────────────────────────────────
-  async getHistory(limit = 20) {
-    return this.request(`/api/history/?limit=${limit}`);
+  async getHistory(skip = 0, limit = 5) {
+    return this.request(`/api/history/?skip=${skip}&limit=${limit}`);
   }
 
   async getMoodGraph(days = 7) {

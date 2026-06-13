@@ -1,15 +1,18 @@
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from app.core.config import settings
-from fastapi import APIRouter, HTTPException, status, Depends, Request
+from fastapi import APIRouter, HTTPException, status, Depends, Request, UploadFile, File
 from fastapi.responses import RedirectResponse
+import os
+import shutil
+import uuid
 from typing import cast
 from sqlalchemy.orm import Session
 from urllib.parse import unquote, urlparse, parse_qsl, urlencode, urlunparse
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.services.auth_service import create_user, authenticate_user, create_access_token, get_user_by_email, get_user_by_id, decode_access_token, get_user_by_username, hash_password, verify_password
-from app.schemas.user import RegisterRequest, LoginRequest, TokenResponse, UserResponse, ChangePasswordRequest
+from app.schemas.user import RegisterRequest, LoginRequest, TokenResponse, UserResponse, ChangePasswordRequest, UpdateProfileRequest
 from app.models.models import User
 import logging
 
@@ -207,4 +210,45 @@ def change_password(request: ChangePasswordRequest, current_user: User = Depends
     current_user.hashed_password = hash_password(request.new_password)
     db.commit()
     return {"message": "Şifre başarıyla güncellendi."}
+
+@router.put("/update-profile", response_model=UserResponse)
+def update_profile(request: UpdateProfileRequest, current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if request.username != current_user.username:
+        if get_user_by_username(db, request.username):
+            raise HTTPException(status_code=400, detail="Bu kullanıcı adı zaten alınmış")
+        current_user.username = request.username
+    
+    if request.avatar_url is not None:
+        current_user.avatar_url = request.avatar_url
+
+    db.commit()
+    db.refresh(current_user)
+    return current_user
+
+AVATAR_DIR = "static/avatars"
+os.makedirs(AVATAR_DIR, exist_ok=True)
+
+@router.post("/upload-avatar", response_model=UserResponse)
+async def upload_avatar(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    if not file.content_type or not file.content_type.startswith("image/"):
+        raise HTTPException(status_code=400, detail="Sadece resim dosyaları yüklenebilir.")
+    
+    filename_str = file.filename or "avatar.png"
+    ext = filename_str.split(".")[-1] if "." in filename_str else "png"
+    filename = f"{uuid.uuid4().hex}.{ext}"
+    file_path = os.path.join(AVATAR_DIR, filename)
+    
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(file.file, buffer)
+        
+    avatar_url = f"/static/avatars/{filename}"
+    current_user.avatar_url = avatar_url
+    db.commit()
+    db.refresh(current_user)
+    
+    return current_user
 

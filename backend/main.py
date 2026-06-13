@@ -1,11 +1,13 @@
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from app.routers import auth, mood, music, history
 from app.core.database import engine
 from app.models import models
 from app.core.limiter import limiter
+import os
 
 # Veritabanı tablolarını oluştur (Eğer alembic kullanılmıyorsa)
 models.Base.metadata.create_all(bind=engine)
@@ -31,9 +33,12 @@ try:
                 if 'spotify_token_expires_at' not in columns:
                     conn.execute(text("ALTER TABLE users ADD COLUMN spotify_token_expires_at INTEGER"))
                     modified = True
+                if 'avatar_url' not in columns:
+                    conn.execute(text("ALTER TABLE users ADD COLUMN avatar_url VARCHAR"))
+                    modified = True
                 if modified:
                     trans.commit()
-                    print("Veritabanı migrasyonu tamamlandı: Spotify kolonları eklendi.")
+                    print("Veritabanı migrasyonu tamamlandı: Yeni kolonlar eklendi.")
                 else:
                     trans.rollback()
             except Exception as e:
@@ -62,6 +67,10 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["*"],
 )
+
+# Create static directory if it doesn't exist
+os.makedirs("static/avatars", exist_ok=True)
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Routers
 app.include_router(auth.router,    prefix="/api/auth",    tags=["Authentication"])

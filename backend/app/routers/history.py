@@ -9,7 +9,8 @@ router = APIRouter()
 
 @router.get("/")
 def get_history(
-    limit: int = 20,
+    skip: int = 0,
+    limit: int = 5,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user)
 ):
@@ -18,6 +19,7 @@ def get_history(
         db.query(MoodHistory)
         .filter(MoodHistory.user_id == current_user.id)
         .order_by(MoodHistory.created_at.desc())
+        .offset(skip)
         .limit(limit)
         .all()
     )

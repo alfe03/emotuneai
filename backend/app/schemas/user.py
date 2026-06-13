@@ -18,6 +18,7 @@ class UserResponse(BaseModel):
     id: int
     email: EmailStr
     username: str
+    avatar_url: Optional[str] = None
     spotify_connected: bool = False
 
     class Config:
@@ -25,4 +26,8 @@ class UserResponse(BaseModel):
 
 class ChangePasswordRequest(BaseModel):
     current_password: Optional[str] = None
-    new_password: str
+    new_password: str
+
+class UpdateProfileRequest(BaseModel):
+    username: str
+    avatar_url: Optional[str] = None

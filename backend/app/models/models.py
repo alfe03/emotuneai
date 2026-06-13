@@ -10,6 +10,7 @@ class User(Base):
     id         = Column(Integer, primary_key=True, index=True)
     email      = Column(String, unique=True, index=True, nullable=False)
     username   = Column(String, unique=True, index=True, nullable=False)
+    avatar_url = Column(String, nullable=True)
     hashed_password = Column(String, nullable=False)
     spotify_access_token = Column(String, nullable=True)
     spotify_refresh_token = Column(String, nullable=True)
@@ -70,3 +71,31 @@ class LikedTrack(Base):
     created_at     = Column(DateTime(timezone=True), server_default=func.now())
 
     user = relationship("User", backref="liked_tracks")
+
+
+class SavedPlaylist(Base):
+    __tablename__ = "saved_playlists"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    name = Column(String, nullable=False)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    user = relationship("User", backref="saved_playlists")
+    tracks = relationship("SavedPlaylistTrack", back_populates="playlist", cascade="all, delete-orphan")
+
+
+class SavedPlaylistTrack(Base):
+    __tablename__ = "saved_playlist_tracks"
+
+    id = Column(Integer, primary_key=True, index=True)
+    playlist_id = Column(Integer, ForeignKey("saved_playlists.id"), nullable=False)
+    spotify_id = Column(String, nullable=False)
+    track_name = Column(String, nullable=False)
+    artist_name = Column(String, nullable=False)
+    album_name = Column(String, nullable=True)
+    image_url = Column(String, nullable=True)
+    spotify_url = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    playlist = relationship("SavedPlaylist", back_populates="tracks")
