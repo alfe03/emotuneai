@@ -1,234 +1,140 @@
-// Ortama göre API_BASE belirleme
+// Ortama g�re API_BASE belirleme
 let API_BASE = "";
-if (window.location.hostname === "silver-readers-fold.loca.lt") {
-    // Mobil test tüneli
-    API_BASE = "https://a344f2855cc8ed.lhr.life";
-} else if (window.location.hostname === "emotuneai.utkuaksu.com" || window.location.hostname.endsWith(".github.io")) {
-    // GitHub Pages üzerinden çalışıyorsak ve backend localde tünelle çalışıyorsa
-    // NOT: Tünel kapandığında/yeniden başlatıldığında bu adresi güncellemeniz gerekir.
-    API_BASE = "https://a344f2855cc8ed.lhr.life";
-} else if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" || window.location.hostname.startsWith("192.") || window.location.hostname.startsWith("10.")) {
-    // Local ortam (Frontend 8080, Backend 8000'de ise)
-    if (window.location.port === "8080" || window.location.port === "3000") {
-        API_BASE = `http://${window.location.hostname}:8000`;
-    }
+
+if (window.location.hostname === "emotuneai.utkuaksu.com" || window.location.hostname.endsWith(".github.io")) {
+    // UYARI: Github Pages sadece statik HTML sunar, backend bar�nd�rmaz!
+    // Bu y�zden canl� site, sizin bilgisayar�n�zdaki backend'e ba�lanmaya �al���yor.
+    // Bilgisayar�n�zdaki t�nel kapand���nda canl� site bozulur. Ger�ek ��z�m backend'i Render/Vercel/Heroku'ya y�klemektir.
+    API_BASE = "https://a344f2855cc8ed.lhr.life"; // Ge�ici t�nel adresi (Kapand��� i�in �u an �al��m�yor)
+} else if ((window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") && window.location.port !== "8080" && window.location.port !== "") {
+    API_BASE = "http://127.0.0.1:8000";
 } else {
-    // Canlı Sunucu (Nginx proxy kullanılan VPS'ler için)
+    // Local Nginx (8080) veya Expo Localtunnel (silver-readers-fold.loca.lt) kullan�rken
+    // Nginx zaten /api isteklerini backend'e y�nlendirdi�i i�in API_BASE bo� b�rak�l�r.
     API_BASE = "";
 }
 
 class EmoTuneAPI {
   constructor() {
-    this.token = localStorage.getItem("emotune_token") || null;
+    this.token = localStorage.getItem('token');
   }
 
-  // ── Helpers ──────────────────────────────────────────────────────────────────
-  setToken(token) {
-    this.token = token;
-    localStorage.setItem("emotune_token", token);
-  }
-
-  setAvatar(url) {
-    localStorage.setItem("emotune_avatar", url);
-  }
-
-  getAvatar() {
-    return localStorage.getItem("emotune_avatar") || null;
-  }
-
-  clearToken() {
-    this.token = null;
-    localStorage.removeItem("emotune_token");
-    localStorage.removeItem("emotune_avatar");
-  }
-
-  isLoggedIn() {
-    return !!this.token;
-  }
-
-  async request(endpoint, options = {}) {
-    const headers = { "Content-Type": "application/json", ...options.headers };
-    if (this.token) {
-      headers["Authorization"] = `Bearer ${this.token}`;
-    }
-
-    const res = await fetch(`${API_BASE}${endpoint}`, {
-      ...options,
-      headers,
+  async register(username, email, password) {
+    const res = await fetch(${API_BASE}/api/auth/register, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, email, password })
     });
-
     if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: "Bir hata oluştu." }));
-      throw new Error(err.detail || `HTTP ${res.status}`);
+      const data = await res.json();
+      throw new Error(data.detail || 'Kay�t ba�ar�s�z');
     }
-
     return res.json();
-  }
-
-  // ── Auth ─────────────────────────────────────────────────────────────────────
-  async register(email, name, password) {
-    const data = await this.request("/api/auth/register", {
-      method: "POST",
-      body: JSON.stringify({ email, username: name, password }),
-    });
-    this.setToken(data.access_token);
-    return data;
   }
 
   async login(email, password) {
-    const data = await this.request("/api/auth/login", {
-      method: "POST",
-      body: JSON.stringify({ email, password }),
+    const formData = new URLSearchParams();
+    formData.append('username', email); // OAuth2PasswordRequestForm expects 'username'
+    formData.append('password', password);
+
+    const res = await fetch(${API_BASE}/api/auth/login, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded'
+      },
+      body: formData
     });
-    this.setToken(data.access_token);
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.detail || 'Giri� ba�ar�s�z');
+    }
+    const data = await res.json();
+    this.token = data.access_token;
+    localStorage.setItem('token', this.token);
     return data;
   }
 
+  logout() {
+    this.token = null;
+    localStorage.removeItem('token');
+  }
+
+  // --- Profile / Check Auth ---
   async getMe() {
-    return this.request("/api/auth/me");
-  }
-
-  async changePassword(currentPassword, newPassword) {
-    return this.request("/api/auth/change-password", {
-      method: "POST",
-      body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+    if (!this.token) throw new Error("Token yok");
+    const res = await fetch(${API_BASE}/api/auth/me, {
+      headers: { 'Authorization': Bearer  }
     });
-  }
-
-  async updateProfile(username, avatarUrl) {
-    return this.request("/api/auth/update-profile", {
-      method: "PUT",
-      body: JSON.stringify({ username, avatar_url: avatarUrl }),
-    });
-  }
-
-  async uploadAvatar(file) {
-    const formData = new FormData();
-    formData.append("file", file);
-    
-    const headers = {};
-    if (this.token) {
-      headers["Authorization"] = `Bearer ${this.token}`;
-    }
-    
-    const res = await fetch(`${API_BASE}/api/auth/upload-avatar`, {
-      method: "POST",
-      headers,
-      body: formData
-    });
-    
-    if (!res.ok) {
-      const err = await res.json().catch(() => ({ detail: "Bir hata oluştu." }));
-      throw new Error(err.detail || `HTTP ${res.status}`);
-    }
-    
+    if (!res.ok) throw new Error('Oturum ge�ersiz');
     return res.json();
   }
 
-  logout() {
-    this.clearToken();
-  }
-
-  // ── Mood ─────────────────────────────────────────────────────────────────────
-  async analyzeFace(imageBase64, language = "mixed", contentType = "track", searchQuery = "", genre = "") {
-    return this.request("/api/mood/analyze/face", {
-      method: "POST",
-      body: JSON.stringify({ image_base64: imageBase64, language, content_type: contentType, search_query: searchQuery, genre }),
+  // --- Mood Analysis ---
+  async analyzeText(text) {
+    const res = await fetch(${API_BASE}/api/mood/analyze/text, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': Bearer 
+      },
+      body: JSON.stringify({ text })
     });
+    if (!res.ok) throw new Error('Metin analizi ba�ar�s�z');
+    return res.json();
   }
 
-  async analyzeVideo(videoBase64, language = "mixed", contentType = "track", searchQuery = "", genre = "") {
-    return this.request("/api/mood/analyze/video", {
-      method: "POST",
-      body: JSON.stringify({ video_base64: videoBase64, language, content_type: contentType, search_query: searchQuery, genre }),
+  async analyzeFace(imageBlob) {
+    const formData = new FormData();
+    formData.append('file', imageBlob, 'face.jpg');
+    
+    const res = await fetch(${API_BASE}/api/mood/analyze/face, {
+      method: 'POST',
+      headers: {
+        'Authorization': Bearer 
+      },
+      body: formData
     });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Y�z analizi ba�ar�s�z');
+    }
+    return res.json();
   }
 
-  async analyzeAudio(audioBase64, language = "mixed", contentType = "track", searchQuery = "", genre = "") {
-    return this.request("/api/mood/analyze/audio", {
-      method: "POST",
-      body: JSON.stringify({ audio_base64: audioBase64, language, content_type: contentType, search_query: searchQuery, genre }),
+  async analyzeVoice(audioBlob) {
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'voice.webm');
+    
+    const res = await fetch(${API_BASE}/api/mood/analyze/voice, {
+      method: 'POST',
+      headers: {
+        'Authorization': Bearer 
+      },
+      body: formData
     });
+    if (!res.ok) {
+      const err = await res.json();
+      throw new Error(err.detail || 'Ses analizi ba�ar�s�z');
+    }
+    return res.json();
   }
 
-  async analyzeText(text, language = "mixed", contentType = "track", searchQuery = "", genre = "") {
-    return this.request("/api/mood/analyze/text", {
-      method: "POST",
-      body: JSON.stringify({ text, language, content_type: contentType, search_query: searchQuery, genre }),
+  // --- Music Recommendation ---
+  async getRecommendations(mood) {
+    const res = await fetch(${API_BASE}/api/music/recommend?mood=, {
+      headers: { 'Authorization': Bearer  }
     });
+    if (!res.ok) throw new Error('M�zik �nerileri al�namad�');
+    return res.json();
   }
 
-  async manualMood(mood, language = "mixed", contentType = "track", searchQuery = "", genre = "", requestedArtist = null, noSave = false) {
-    return this.request("/api/mood/manual", {
-      method: "POST",
-      body: JSON.stringify({ mood, language, content_type: contentType, search_query: searchQuery, genre, requested_artist: requestedArtist, no_save: noSave }),
+  // --- History ---
+  async getHistory() {
+    const res = await fetch(${API_BASE}/api/history/, {
+      headers: { 'Authorization': Bearer  }
     });
-  }
-
-  // ── Music ────────────────────────────────────────────────────────────────────
-  async likeTrack(trackObj, action) {
-    // trackObj expects: { spotify_id, track_name, artist_name, album_name, image_url, spotify_url }
-    return this.request("/api/music/like", {
-      method: "POST",
-      body: JSON.stringify({ ...trackObj, action }),
-    });
-  }
-
-  async getLikedTracks() {
-    return this.request("/api/music/liked");
-  }
-
-  async exportPlaylist(moodHistoryId, playlistName) {
-    return this.request("/api/music/export-playlist", {
-      method: "POST",
-      body: JSON.stringify({ mood_history_id: moodHistoryId, playlist_name: playlistName }),
-    });
-  }
-
-  async saveInternalPlaylist(moodHistoryId, playlistName) {
-    return this.request("/api/music/save-internal-playlist", {
-      method: "POST",
-      body: JSON.stringify({ mood_history_id: moodHistoryId, playlist_name: playlistName }),
-    });
-  }
-
-  async saveInternalPlaylist(moodHistoryId, playlistName) {
-    return this.request("/api/music/save-internal-playlist", {
-      method: "POST",
-      body: JSON.stringify({ mood_history_id: moodHistoryId, playlist_name: playlistName }),
-    });
-  }
-
-  async getSavedPlaylists() {
-    return this.request("/api/music/saved-playlists");
-  }
-
-  async deleteSavedPlaylist(id) {
-    return this.request(`/api/music/saved-playlists/${id}`, { method: "DELETE" });
-  }
-
-  async exportSavedPlaylist(savedPlaylistId) {
-    return this.request("/api/music/export-saved-playlist", {
-      method: "POST",
-      body: JSON.stringify({ saved_playlist_id: savedPlaylistId }),
-    });
-  }
-
-  // ── History ──────────────────────────────────────────────────────────────────
-  async getHistory(skip = 0, limit = 5) {
-    return this.request(`/api/history/?skip=${skip}&limit=${limit}`);
-  }
-
-  async getMoodGraph(days = 7) {
-    return this.request(`/api/history/graph?days=${days}`);
-  }
-
-  async getHistoryAnalytics(days = 30) {
-    return this.request(`/api/history/analytics?days=${days}`);
-  }
-
-  async deleteHistory(id) {
-    return this.request(`/api/history/${id}`, { method: "DELETE" });
+    if (!res.ok) throw new Error('Ge�mi� al�namad�');
+    return res.json();
   }
 }
 
