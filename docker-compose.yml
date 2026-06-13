@@ -32,7 +32,7 @@ services:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:password@db:5432/emotune}
       CORS_ORIGINS: "*"
       FRONTEND_URL: http://localhost:8080/index.html
-      SPOTIFY_REDIRECT_URI: http://127.0.0.1:8000/api/auth/spotify/callback
+      SPOTIFY_REDIRECT_URI: ${SPOTIFY_REDIRECT_URI:-http://127.0.0.1:8000/api/auth/spotify/callback}
     depends_on:
       db:
         condition: service_healthy
