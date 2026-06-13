@@ -10,7 +10,7 @@ export default function App() {
       <StatusBar barStyle="light-content" backgroundColor="#121212" />
       <WebView 
         ref={webViewRef}
-        source={{ uri: 'http://10.127.181.191:8080' }} 
+        source={{ uri: 'https://silver-readers-fold.loca.lt' }} 
         style={styles.webview}
         // Enable camera/microphone in WebView for face/video analysis
         allowsInlineMediaPlayback={true}
