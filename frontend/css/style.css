@@ -984,6 +984,8 @@ body.theme-light .app-logo {
   overflow: hidden;
   aspect-ratio: 4/3;
   max-height: 400px;
+  max-width: 100%;
+  margin: 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
