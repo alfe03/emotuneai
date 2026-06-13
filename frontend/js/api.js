@@ -1,8 +1,8 @@
 // ─── EmoTuneAI API Layer ─────────────────────────────────────────────────────
 // Docker'da nginx üzerinden proxy, local'de direkt backend
-const API_BASE = window.location.port === "8000"
-  ? ""  // direkt backend üzerinde çalışıyoruz
-  : `http://${window.location.hostname}:8000`; // frontend dev server veya başka port → backend'e yönlendir
+const API_BASE = (window.location.hostname === "emotuneai.utkuaksu.com" || window.location.hostname.endsWith(".github.io"))
+  ? "http://localhost:8000"
+  : (window.location.port === "8000" ? "" : `http://${window.location.hostname}:8000`);
 
 class EmoTuneAPI {
   constructor() {
