@@ -3,7 +3,7 @@ let API_BASE = "";
 
 if (window.location.hostname === "emotuneai.utkuaksu.com" || window.location.hostname.endsWith(".github.io")) {
     // GitHub Pages üzerinden çalışıyorsak ve backend localde tünelle çalışıyorsa
-    API_BASE = "https://9c9c7a2375d5c0.lhr.life";
+    API_BASE = "https://5bc8a407cec751.lhr.life";
 } else if ((window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") && window.location.port !== "8080" && window.location.port !== "") {
     // Sadece eğer frontend Nginx kullanmadan, doğrudan ayrı bir geliştirici sunucusunda (örn: VS Code Live Server 5500) çalışıyorsa
     API_BASE = "http://127.0.0.1:8000";
