@@ -39,7 +39,7 @@ class EmoTuneAPI {
   }
 
   async request(endpoint, options = {}) {
-    const headers = { "Content-Type": "application/json", ...options.headers };
+    const headers = { "Content-Type": "application/json", "bypass-tunnel-reminder": "true", ...options.headers };
     if (this.token) {
       headers["Authorization"] = `Bearer ${this.token}`;
     }
@@ -98,7 +98,7 @@ class EmoTuneAPI {
     const formData = new FormData();
     formData.append("file", file);
 
-    const headers = {};
+    const headers = { "bypass-tunnel-reminder": "true" };
     if (this.token) {
       headers["Authorization"] = `Bearer ${this.token}`;
     }
