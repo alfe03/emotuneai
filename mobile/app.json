@@ -12,6 +12,13 @@
         "android.permission.MODIFY_AUDIO_SETTINGS"
       ]
     },
+    "ios": {
+      "infoPlist": {
+        "NSCameraUsageDescription": "Ruh halinizi yüzünüzden analiz edebilmek için kameraya ihtiyacımız var.",
+        "NSMicrophoneUsageDescription": "Ses tonunuzdan duygu analizi yapabilmek için mikrofona ihtiyacımız var."
+      }
+    },
     "plugins": []
   }
 }
+
