@@ -40,7 +40,8 @@ def get_spotify_oauth():
         client_id=settings.SPOTIFY_CLIENT_ID,
         client_secret=settings.SPOTIFY_CLIENT_SECRET,
         redirect_uri=settings.SPOTIFY_REDIRECT_URI,
-        scope="user-read-private user-read-email playlist-modify-public playlist-modify-private"
+        scope="user-read-private user-read-email playlist-modify-public playlist-modify-private",
+        show_dialog=True
     )
 
 @router.get("/spotify/login")
@@ -107,7 +108,11 @@ def spotify_callback(request: Request, db: Session = Depends(get_db)):
         sp = spotipy.Spotify(auth=access_token)
         user_info = sp.current_user()
         if user_info:
-            logger.info(f"Spotify Kullanıcı Bilgisi: {user_info.get('id')} - {user_info.get('email')}")
+            print("=========== SPOTIFY DEBUG ===========", flush=True)
+            print(f"Spotify ID: {user_info.get('id')}", flush=True)
+            print(f"Spotify Email: {user_info.get('email')}", flush=True)
+            print(f"Spotify Display Name: {user_info.get('display_name')}", flush=True)
+            print("=====================================", flush=True)
         
         email = user_info.get("email") if user_info else None
         if not email:
@@ -178,7 +183,7 @@ def register(request: RegisterRequest, db: Session = Depends(get_db)):
 from app.core.limiter import limiter
 
 @router.post("/login", response_model=TokenResponse)
-@limiter.limit("5/minute")
+@limiter.limit("50/minute")
 def login(request: Request, login_request: LoginRequest, db: Session = Depends(get_db)):
     user = authenticate_user(db, login_request.email, login_request.password)
     if not user:

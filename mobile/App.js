@@ -10,7 +10,11 @@ export default function App() {
       <StatusBar barStyle="light-content" backgroundColor="#121212" />
       <WebView 
         ref={webViewRef}
-        source={{ uri: 'https://silver-readers-fold.loca.lt' }} 
+        userAgent="localtunnel"
+        source={{ 
+          uri: 'https://silver-readers-fold.loca.lt',
+          headers: { 'Bypass-Tunnel-Reminder': 'true' }
+        }} 
         style={styles.webview}
         // Enable camera/microphone in WebView for face/video analysis
         allowsInlineMediaPlayback={true}
