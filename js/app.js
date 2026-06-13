@@ -1682,9 +1682,39 @@ function setupExportModalActions() {
   const cancelBtn = document.getElementById("btn-cancel-export");
   const confirmBtn = document.getElementById("btn-confirm-export");
   const saveInternalBtn = document.getElementById("btn-save-internal");
+  const copyTracksBtn = document.getElementById("btn-copy-tracks");
   
   if (closeBtn) closeBtn.addEventListener("click", closeExportModal);
   if (cancelBtn) cancelBtn.addEventListener("click", closeExportModal);
+  
+  if (copyTracksBtn) {
+    copyTracksBtn.addEventListener("click", async () => {
+      if (!activeMoodHistoryIdForExport) return;
+      try {
+        const historyData = await api.getMoodHistory();
+        const historyItem = historyData.find(h => h.id === activeMoodHistoryIdForExport);
+        if (historyItem && historyItem.recommended_tracks) {
+            const textToCopy = historyItem.recommended_tracks.map((t, i) => `${i+1}. ${t.track_name} - ${t.artist_name}`).join("\n");
+            try {
+                await navigator.clipboard.writeText(textToCopy);
+            } catch (e) {
+                const textArea = document.createElement("textarea");
+                textArea.value = textToCopy;
+                document.body.appendChild(textArea);
+                textArea.focus();
+                textArea.select();
+                document.execCommand('copy');
+                document.body.removeChild(textArea);
+            }
+            showToast("Şarkı listesi başarıyla kopyalandı! 🎉", "success");
+        } else {
+            showToast("Kopyalanacak şarkı bulunamadı.", "warning");
+        }
+      } catch (err) {
+          showToast("Kopyalama başarısız oldu.", "error");
+      }
+    });
+  }
   
   if (saveInternalBtn) {
     saveInternalBtn.addEventListener("click", async () => {
@@ -1771,7 +1801,11 @@ function setupExportModalActions() {
           }
         }, 1000);
       } catch (err) {
-        showToast("Çalma listesi aktarılırken hata: " + err.message, "error");
+        if (err.message && err.message.includes("403")) {
+          showError("⚠️ Spotify API Kısıtlaması: Spotify'ın 2024 geliştirici kuralları gereği, otomatik çalma listesi oluşturma işlemi yeni uygulamalar için reddedilmiştir (403 Forbidden). Lütfen 'Şarkıları Kopyala' butonunu kullanarak şarkıları manuel kopyalayınız.");
+        } else {
+          showToast("Çalma listesi aktarılırken hata: " + err.message, "error");
+        }
       } finally {
         confirmBtn.disabled = false;
         confirmBtn.textContent = "Oluştur ve Aktar";
@@ -1803,10 +1837,14 @@ function loadProfilePage() {
   if (!currentUser) return;
 
   const usernameInput = document.getElementById("profile-username");
+  const emailInput = document.getElementById("profile-email");
   const avatarFileInput = document.getElementById("profile-avatar-file");
   const avatarPreview = document.getElementById("profile-avatar-preview");
   
   usernameInput.value = currentUser.username || currentUser.email;
+  if (emailInput) {
+    emailInput.value = currentUser.email;
+  }
   // File inputs cannot be pre-filled with a value for security reasons.
   
   const initial = (currentUser.username || currentUser.email || "U").trim().charAt(0).toUpperCase();
@@ -2047,10 +2085,16 @@ async function loadSavedPlaylists() {
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right: 8px;"><path d="M9 18V5l12-2v13"></path><circle cx="6" cy="18" r="3"></circle><circle cx="18" cy="16" r="3"></circle></svg>
             Spotify'a Aktar
           </button>
+          <button class="btn btn-secondary" onclick="copyPlaylistTracks(${p.id}, this)" style="margin-top: 0.5rem; width: 100%; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border);">
+            Şarkıları Kopyala
+          </button>
         `;
       } else {
         exportBtnHtml = `
-          <button class="btn btn-secondary" onclick="showToast('Spotify hesabınızı bağlayarak bu listeyi aktarabilirsiniz.', 'info')" style="margin-top: 1rem; width: 100%; opacity: 0.7;">
+          <button class="btn btn-secondary" onclick="copyPlaylistTracks(${p.id}, this)" style="margin-top: 1rem; width: 100%; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border);">
+            Şarkıları Kopyala
+          </button>
+          <button class="btn btn-secondary" onclick="showToast('Spotify hesabınızı bağlayarak bu listeyi aktarabilirsiniz.', 'info')" style="margin-top: 0.5rem; width: 100%; opacity: 0.7;">
             Spotify'a Aktarmak İçin Hesabınızı Bağlayın
           </button>
         `;
@@ -2115,9 +2159,43 @@ async function exportSavedPlaylistToSpotify(id, btn) {
       }
     }, 1000);
   } catch (err) {
-    showToast("Aktarılırken hata: " + err.message, "error");
+    if (err.message && err.message.includes("403")) {
+      showToast("⚠️ Spotify API Kısıtlaması (403 Forbidden). Lütfen 'Şarkıları Kopyala' butonunu kullanın.", "error");
+    } else {
+      showToast("Aktarılırken hata: " + err.message, "error");
+    }
   } finally {
     btn.disabled = false;
+    btn.innerHTML = originalText;
+  }
+}
+
+async function copyPlaylistTracks(id, btn) {
+  const originalText = btn.innerHTML;
+  btn.innerHTML = '<span class="spinner"></span> Kopyalanıyor...';
+  try {
+    const playlists = await api.getSavedPlaylists();
+    const p = playlists.find(x => x.id === id);
+    if (p && p.tracks) {
+      const textToCopy = p.tracks.map((t, i) => `${i+1}. ${t.track_name} - ${t.artist_name}`).join("\\n");
+      try {
+        await navigator.clipboard.writeText(textToCopy);
+      } catch (e) {
+        const textArea = document.createElement("textarea");
+        textArea.value = textToCopy;
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      showToast("Şarkı listesi başarıyla kopyalandı! 🎉", "success");
+    } else {
+      showToast("Kopyalanacak şarkı bulunamadı.", "warning");
+    }
+  } catch (err) {
+    showToast("Kopyalama başarısız oldu: " + err.message, "error");
+  } finally {
     btn.innerHTML = originalText;
   }
 }

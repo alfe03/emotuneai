@@ -368,9 +368,13 @@
                 <input type="file" id="profile-avatar-file" accept="image/*" style="display: none;">
               </div>
               <div style="flex: 1;">
-                <div class="form-group" style="margin-bottom: 0;">
+                <div class="form-group" style="margin-bottom: 1rem;">
                   <label for="profile-username">Kullanıcı Adı</label>
                   <input type="text" id="profile-username" class="form-input" placeholder="İsminiz">
+                </div>
+                <div class="form-group" style="margin-bottom: 0;">
+                  <label for="profile-email">Kayıtlı E-Posta Adresi</label>
+                  <input type="email" id="profile-email" class="form-input" disabled style="opacity: 0.6; cursor: not-allowed; background: rgba(0,0,0,0.1);">
                 </div>
               </div>
             </div>
@@ -454,6 +458,7 @@
       <div class="modal-footer" style="display: flex; flex-direction: column; gap: 0.8rem; width: 100%;">
         <button class="btn btn-primary" id="btn-confirm-export" style="width: 100%; margin: 0;">Spotify'a Aktar</button>
         <button class="btn btn-secondary" id="btn-save-internal" style="width: 100%; margin: 0; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border);">Uygulamaya Kaydet</button>
+        <button class="btn btn-secondary" id="btn-copy-tracks" style="width: 100%; margin: 0; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border);">Şarkıları Kopyala</button>
         <button class="btn btn-logout" id="btn-cancel-export" style="width: 100%; margin: 0; background: transparent; border: none; color: var(--text-secondary);">İptal</button>
       </div>
     </div>
