@@ -52,5 +52,15 @@ services:
     depends_on:
       - backend
 
+  # ── Cloudflare Tunnel (cloudflared) ────────────────────
+  tunnel:
+    image: cloudflare/cloudflared:latest
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    command: tunnel --no-autoupdate run
+    depends_on:
+      - backend
+
 volumes:
   postgres_data:
