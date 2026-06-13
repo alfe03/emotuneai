@@ -3238,3 +3238,5 @@ body.theme-light #voice-visualizer-bars .visualizer-bar {
 }
 
 .results-filter-bar { position: relative !important; z-index: 500 !important; }
+
+@media (max-width: 768px) { .sidebar { height: calc(65px + env(safe-area-inset-bottom, 20px)) !important; padding-bottom: env(safe-area-inset-bottom, 20px) !important; z-index: 1000 !important; } .sidebar-nav { height: 65px !important; } .main-content { padding-bottom: calc(80px + env(safe-area-inset-bottom, 20px)) !important; } }
