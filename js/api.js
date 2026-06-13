@@ -4,8 +4,9 @@ if (window.location.hostname === "silver-readers-fold.loca.lt") {
     // Mobil test tüneli
     API_BASE = "https://a344f2855cc8ed.lhr.life";
 } else if (window.location.hostname === "emotuneai.utkuaksu.com" || window.location.hostname.endsWith(".github.io")) {
-    // GitHub Pages üzerinden çalışıyorsak ve backend localde çalışıyorsa
-    API_BASE = "http://localhost:8000";
+    // GitHub Pages üzerinden çalışıyorsak ve backend localde tünelle çalışıyorsa
+    // NOT: Tünel kapandığında/yeniden başlatıldığında bu adresi güncellemeniz gerekir.
+    API_BASE = "https://a344f2855cc8ed.lhr.life";
 } else if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" || window.location.hostname.startsWith("192.") || window.location.hostname.startsWith("10.")) {
     // Local ortam (Frontend 8080, Backend 8000'de ise)
     if (window.location.port === "8080" || window.location.port === "3000") {
