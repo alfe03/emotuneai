@@ -1,20 +1,9 @@
 // Ortama göre API_BASE belirleme
 let API_BASE = "";
-if (window.location.hostname === "silver-readers-fold.loca.lt") {
-    // Mobil test tüneli
-    API_BASE = "https://a344f2855cc8ed.lhr.life";
-} else if (window.location.hostname === "emotuneai.utkuaksu.com" || window.location.hostname.endsWith(".github.io")) {
-    // GitHub Pages üzerinden çalışıyorsak ve backend localde tünelle çalışıyorsa
-    // NOT: Tünel kapandığında/yeniden başlatıldığında bu adresi güncellemeniz gerekir.
-    API_BASE = "https://a344f2855cc8ed.lhr.life";
-} else if (window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1" || window.location.hostname.startsWith("192.") || window.location.hostname.startsWith("10.")) {
-    // Local ortam (Frontend 8080, Backend 8000'de ise)
-    if (window.location.port === "8080" || window.location.port === "3000") {
-        API_BASE = `http://${window.location.hostname}:8000`;
-    }
-} else {
-    // Canlı Sunucu (Nginx proxy kullanılan VPS'ler için)
-    API_BASE = "";
+
+// Sadece eğer frontend Nginx kullanmadan, doğrudan ayrı bir geliştirici sunucusunda (örn: VS Code Live Server 5500) çalışıyorsa
+if ((window.location.hostname === "localhost" || window.location.hostname === "127.0.0.1") && window.location.port !== "8080" && window.location.port !== "") {
+    API_BASE = "http://127.0.0.1:8000";
 }
 
 class EmoTuneAPI {
@@ -105,23 +94,23 @@ class EmoTuneAPI {
   async uploadAvatar(file) {
     const formData = new FormData();
     formData.append("file", file);
-    
+
     const headers = {};
     if (this.token) {
       headers["Authorization"] = `Bearer ${this.token}`;
     }
-    
+
     const res = await fetch(`${API_BASE}/api/auth/upload-avatar`, {
       method: "POST",
       headers,
       body: formData
     });
-    
+
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Bir hata oluştu." }));
       throw new Error(err.detail || `HTTP ${res.status}`);
     }
-    
+
     return res.json();
   }
 
