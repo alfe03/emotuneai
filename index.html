@@ -2,7 +2,7 @@
 <html lang="tr">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, maximum-scale=1.0, user-scalable=no">
   <meta name="description" content="EmoTuneAI - Yapay zeka destekli duygu tabanlı müzik öneri sistemi. Ruh halinize göre müzik keşfedin.">
   <title>EmoTuneAI – Duygu ile Müzik Keşfet</title>
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='85'>E</text></svg>">
@@ -28,67 +28,112 @@
   <!-- ════════════════════════════════════════════════════════════════════════ -->
   <div id="auth-screen" class="auth-screen active">
     <div class="auth-container">
-      <div class="auth-logo">
-        <h1>EmoTuneAI</h1>
-        <p>Ruh halinize göre müzik keşfedin</p>
+      <div class="auth-logo" style="text-align: center; margin-bottom: 1rem;">
+        <img src="./assets/logo.png" alt="EmoTune AI" style="height: 70px; width: auto; object-fit: contain; margin-bottom: 5px;">
+        <p style="margin-top: 0; font-size: 0.85rem;">Ruh halinize göre müzik keşfedin</p>
       </div>
 
-      <div class="auth-card">
+      <div class="auth-card auth-card-modern">
+        <!-- Auth Tabs (Segmented Control) -->
+        <div class="auth-tabs">
+          <button type="button" class="auth-tab-btn active" data-target="login-form">Giriş Yap</button>
+          <button type="button" class="auth-tab-btn" data-target="register-form">Kayıt Ol</button>
+        </div>
+
         <!-- Login Form -->
         <form id="login-form" class="auth-form active">
-          <h2>Giriş Yap</h2>
-
           <div class="form-group">
-            <label for="login-email">E-posta</label>
-            <input type="email" id="login-email" class="form-input" placeholder="ornek@email.com" required>
+            <div class="input-with-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+              <input type="email" id="login-email" class="form-input" placeholder="E-posta Adresiniz" required>
+            </div>
           </div>
 
           <div class="form-group">
-            <label for="login-password">Şifre</label>
-            <input type="password" id="login-password" class="form-input" placeholder="••••••••" required>
+            <div class="input-with-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              <input type="password" id="login-password" class="form-input" placeholder="Şifreniz" required>
+            </div>
           </div>
 
           <p id="login-error" class="form-error"></p>
-          <button type="submit" class="btn btn-primary btn-full">Giriş Yap</button>
+          <button type="submit" class="btn btn-pill-primary btn-full">Giriş Yap</button>
+
+          <p class="auth-forgot-password" style="text-align: center; margin-top: 1rem; font-size: 0.85rem;">
+            <a href="#" id="forgot-password-link" style="color: var(--text-secondary); text-decoration: none; transition: color 0.2s;">Şifremi Unuttum?</a>
+          </p>
 
           <div class="auth-divider">
             <span>VEYA</span>
           </div>
           
-          <button type="button" class="btn btn-spotify btn-full" id="btn-spotify-login">
-            <svg width="24" height="24" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 8px;"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
+          <button type="button" class="btn btn-spotify btn-full btn-pill" id="btn-spotify-login">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor" style="margin-right: 8px;"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.419 1.56-.299.421-1.02.599-1.559.3z"/></svg>
             Spotify ile Giriş Yap
           </button>
-
-          <p class="auth-switch">
-            Hesabınız yok mu? <a href="#" id="show-register">Kayıt Ol</a>
-          </p>
         </form>
 
         <!-- Register Form -->
         <form id="register-form" class="auth-form">
-          <h2>Kayıt Ol</h2>
-
           <div class="form-group">
-            <label for="reg-email">E-posta</label>
-            <input type="email" id="reg-email" class="form-input" placeholder="ornek@email.com" required>
+            <div class="input-with-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+              <input type="email" id="reg-email" class="form-input" placeholder="E-posta Adresiniz" required>
+            </div>
           </div>
 
           <div class="form-group">
-            <label for="reg-name">Kullanıcı Adı</label>
-            <input type="text" id="reg-name" class="form-input" placeholder="Adınız" required>
+            <div class="input-with-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              <input type="text" id="reg-name" class="form-input" placeholder="Kullanıcı Adınız" required>
+            </div>
           </div>
 
           <div class="form-group">
-            <label for="reg-password">Şifre</label>
-            <input type="password" id="reg-password" class="form-input" placeholder="En az 6 karakter" required minlength="6">
+            <div class="input-with-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              <input type="password" id="reg-password" class="form-input" placeholder="Şifreniz (En az 6 karakter)" required minlength="6">
+            </div>
           </div>
 
           <p id="reg-error" class="form-error"></p>
-          <button type="submit" class="btn btn-primary btn-full">Kayıt Ol</button>
+          <button type="submit" class="btn btn-pill-primary btn-full">Kayıt Ol</button>
+        </form>
 
-          <p class="auth-switch">
-            Zaten hesabınız var mı? <a href="#" id="show-login">Giriş Yap</a>
+        <!-- Forgot Password Form -->
+        <form id="forgot-password-form" class="auth-form" style="display: none;">
+          <h2 style="text-align: center; margin-bottom: 0.5rem; font-size: 1.5rem; color: var(--text-primary);">Şifrenizi mi Unuttunuz?</h2>
+          <p style="text-align: center; color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.9rem;">
+            E-posta adresinizi girin, size şifre sıfırlama bağlantısı gönderelim.
+          </p>
+          <div class="form-group">
+            <div class="input-with-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path><polyline points="22,6 12,13 2,6"></polyline></svg>
+              <input type="email" id="forgot-email" class="form-input" placeholder="E-posta Adresiniz" required>
+            </div>
+          </div>
+          <p id="forgot-error" class="form-error"></p>
+          <button type="submit" class="btn btn-pill-primary btn-full">Bağlantı Gönder</button>
+          
+          <p style="text-align: center; margin-top: 1rem; font-size: 0.85rem;">
+            <a href="#" id="forgot-back-to-login" style="color: var(--text-secondary); text-decoration: none;">Giriş ekranına dön</a>
+          </p>
+        </form>
+
+        <!-- Reset Password Form -->
+        <form id="reset-password-form" class="auth-form" style="display: none;">
+          <h2 style="text-align: center; margin-bottom: 1.5rem; font-size: 1.5rem; color: var(--text-primary);">Yeni Şifreniz</h2>
+          <div class="form-group">
+            <div class="input-with-icon">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"></rect><path d="M7 11V7a5 5 0 0 1 10 0v4"></path></svg>
+              <input type="password" id="reset-new-password" class="form-input" placeholder="Yeni Şifreniz" required minlength="6">
+            </div>
+          </div>
+          <p id="reset-error" class="form-error"></p>
+          <button type="submit" class="btn btn-pill-primary btn-full">Şifreyi Güncelle</button>
+          
+          <p style="text-align: center; margin-top: 1rem; font-size: 0.85rem;">
+            <a href="#" id="back-to-login" style="color: var(--text-secondary); text-decoration: none;">Giriş ekranına dön</a>
           </p>
         </form>
       </div>
@@ -234,7 +279,7 @@
         <!-- Voice Panel -->
         <div id="panel-voice" class="mood-panel">
           <div id="voice-input-container" class="voice-panel-container">
-            <div class="mic-wrapper">
+            <div class="mic-wrapper" style="display: flex; gap: 1rem; justify-content: center; align-items: center;">
               <button class="btn-mic" id="btn-mic-record" title="Ses Kaydı Başlat">
                 <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                   <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3z"></path>
@@ -242,6 +287,7 @@
                   <line x1="12" y1="19" x2="12" y2="22"></line>
                 </svg>
               </button>
+              <button class="btn" id="btn-mic-cancel" style="display: none; padding: 0.6rem 1rem; font-size: 0.85rem; background: rgba(255, 82, 82, 0.1); color: var(--accent-intense); border: 1px solid rgba(255, 82, 82, 0.3); border-radius: 12px; font-weight: 600;" title="Kaydı İptal Et">İptal</button>
             </div>
             <div class="voice-status" id="voice-status-label">Sesinizi analiz etmek için mikrofona dokunun</div>
             <div class="voice-timer" id="voice-record-timer" style="display: none;">0:00 / 0:08</div>

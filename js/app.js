@@ -15,6 +15,7 @@ let lastMoodCategory = null;          // Son analiz edilen mood (filtre değişi
 let lastEmotion = null;
 let lastSearchQuery = "";             // Sonuçlar içinde arama yapmak için (örn: "Duman")
 let lastRequestedArtist = null;       // Son algılanan veya filtrelenen sanatçı ismi
+let isArtistFilterActive = true;      // Sanatçı filtresinin aktif olup olmadığı
 let lastCapturedFaceBase64 = null;    // Son çekilen yüz fotoğrafı
 let moodDistChartInstance = null;
 let moodTrendChartInstance = null;
@@ -105,7 +106,7 @@ function setupNavigation() {
       const isCollapsed = document.getElementById("sidebar").classList.contains("collapsed");
       localStorage.setItem("sidebarCollapsed", isCollapsed);
     });
-    
+
     // Yükleme sırasında localStorage kontrolü
     if (localStorage.getItem("sidebarCollapsed") === "true") {
       document.getElementById("sidebar").classList.add("collapsed");
@@ -115,15 +116,21 @@ function setupNavigation() {
   document.getElementById("btn-logout").addEventListener("click", () => {
     api.logout();
     currentUser = null;
+    currentResults = null;
+    document.body.classList.forEach(c => { if (c.startsWith('theme-')) document.body.classList.remove(c); });
+    document.body.removeAttribute('data-mood');
     localStorage.removeItem("lastPage");
     showAuth();
   });
-  
+
   const btnLogoutMobile = document.getElementById("btn-logout-mobile");
   if (btnLogoutMobile) {
     btnLogoutMobile.addEventListener("click", () => {
       api.logout();
       currentUser = null;
+      currentResults = null;
+      document.body.classList.forEach(c => { if (c.startsWith('theme-')) document.body.classList.remove(c); });
+      document.body.removeAttribute('data-mood');
       localStorage.removeItem("lastPage");
       showAuth();
     });
@@ -155,7 +162,7 @@ function showApp() {
   document.getElementById("app-screen").classList.add("active");
   if (currentUser) {
     document.getElementById("user-greeting").textContent = currentUser.username || currentUser.email;
-    
+
     // Sync avatar from backend user object if available
     if (currentUser.avatar_url) {
       api.setAvatar(currentUser.avatar_url);
@@ -163,7 +170,7 @@ function showApp() {
 
     const avatarUrl = api.getAvatar();
     const avatarEl = document.getElementById("user-avatar");
-    
+
     if (avatarUrl) {
       if (avatarEl) {
         const fullUrl = avatarUrl.startsWith('data:') || avatarUrl.startsWith('http') ? avatarUrl : API_BASE + avatarUrl;
@@ -186,17 +193,121 @@ function showApp() {
 }
 
 function setupAuthForms() {
-  // Toggle between login/register
-  document.getElementById("show-register").addEventListener("click", (e) => {
-    e.preventDefault();
-    document.getElementById("login-form").classList.remove("active");
-    document.getElementById("register-form").classList.add("active");
+  // Toggle between login/register tabs
+  document.querySelectorAll('.auth-tab-btn').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      document.querySelectorAll('.auth-tab-btn').forEach(b => b.classList.remove('active'));
+      e.target.classList.add('active');
+      
+      document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+      document.getElementById(e.target.dataset.target).classList.add('active');
+    });
   });
-  document.getElementById("show-login").addEventListener("click", (e) => {
-    e.preventDefault();
-    document.getElementById("register-form").classList.remove("active");
-    document.getElementById("login-form").classList.add("active");
-  });
+
+  // Forgot password handler
+  const forgotPasswordLink = document.getElementById('forgot-password-link');
+  const forgotPasswordForm = document.getElementById('forgot-password-form');
+  const forgotBackToLogin = document.getElementById('forgot-back-to-login');
+
+  if (forgotPasswordLink && forgotPasswordForm) {
+    // Show forgot password form
+    forgotPasswordLink.addEventListener('click', (e) => {
+      e.preventDefault();
+      document.querySelector('.auth-tabs').style.display = 'none';
+      document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+      
+      forgotPasswordForm.style.display = 'block';
+      setTimeout(() => forgotPasswordForm.classList.add('active'), 10);
+      
+      const currentEmail = document.getElementById("login-email").value;
+      if (currentEmail) {
+        document.getElementById("forgot-email").value = currentEmail;
+      }
+    });
+
+    // Handle submit
+    forgotPasswordForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const email = document.getElementById("forgot-email").value;
+      const btn = e.target.querySelector("button[type=submit]");
+      const errEl = document.getElementById('forgot-error');
+      
+      errEl.textContent = "";
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Gönderiliyor...';
+
+      try {
+        const res = await api.forgotPassword(email);
+        showToast(res.message || "Şifre sıfırlama bağlantısı gönderildi.", "success");
+        // Go back to login form
+        forgotBackToLogin.click();
+      } catch (err) {
+        errEl.textContent = err.message || "Bir hata oluştu.";
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Bağlantı Gönder";
+      }
+    });
+
+    // Back to login form
+    forgotBackToLogin.addEventListener('click', (e) => {
+      e.preventDefault();
+      forgotPasswordForm.style.display = 'none';
+      forgotPasswordForm.classList.remove('active');
+      document.querySelector('.auth-tabs').style.display = 'flex';
+      document.getElementById('login-form').classList.add('active');
+    });
+  }
+
+  // Handle Password Reset Flow
+  const urlParams = new URLSearchParams(window.location.search);
+  const resetToken = urlParams.get('reset_token');
+
+  if (resetToken) {
+    // Hide tabs and show reset form
+    document.querySelector('.auth-tabs').style.display = 'none';
+    document.querySelectorAll('.auth-form').forEach(f => f.classList.remove('active'));
+    
+    const resetForm = document.getElementById('reset-password-form');
+    resetForm.style.display = 'block';
+    resetForm.classList.add('active');
+
+    resetForm.addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const newPassword = document.getElementById('reset-new-password').value;
+      const btn = e.target.querySelector("button[type=submit]");
+      const errEl = document.getElementById('reset-error');
+      
+      errEl.textContent = "";
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> Güncelleniyor...';
+
+      try {
+        const res = await api.resetPassword(resetToken, newPassword);
+        showToast(res.message, "success");
+        // Clear token from URL and go back to login
+        window.history.replaceState({}, document.title, window.location.pathname);
+        setTimeout(() => {
+          resetForm.style.display = 'none';
+          document.querySelector('.auth-tabs').style.display = 'flex';
+          document.getElementById('login-form').classList.add('active');
+        }, 1500);
+      } catch (err) {
+        errEl.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "Şifreyi Güncelle";
+      }
+    });
+
+    document.getElementById('back-to-login').addEventListener('click', (e) => {
+      e.preventDefault();
+      window.history.replaceState({}, document.title, window.location.pathname);
+      document.getElementById('reset-password-form').style.display = 'none';
+      document.querySelector('.auth-tabs').style.display = 'flex';
+      document.getElementById('login-form').classList.add('active');
+    });
+  }
 
   // Spotify Login redirects
   const spotifyLoginFn = () => {
@@ -204,7 +315,7 @@ function setupAuthForms() {
     window.location.href = `${API_BASE}/api/auth/spotify/login?redirect=${redirect}`;
   };
   const spotifyBtn = document.getElementById("btn-spotify-login");
-  if(spotifyBtn) spotifyBtn.addEventListener("click", spotifyLoginFn);
+  if (spotifyBtn) spotifyBtn.addEventListener("click", spotifyLoginFn);
 
   // Login
   document.getElementById("login-form").addEventListener("submit", async (e) => {
@@ -267,52 +378,49 @@ function setupMoodActions() {
       const targetSource = tab.dataset.moodTab;
       const resultsSection = document.getElementById("results-section");
 
-      // Eğer mevcut bir sonuç varsa ve bu sonucun kaynağı şu anki sekmeye aitse göster, değilse gizle
+      // Eğer mevcut bir sonuç varsa ve bu sonucun kaynağı şu anki sekmeye aitse sonuçları ve temayı göster
       if (currentResults && currentResults.source === targetSource) {
         if (resultsSection) {
           resultsSection.style.display = ""; // flex veya block'a döner
           resultsSection.classList.add("active");
         }
-        // Temayı geri yükle
+        // Temayı koru
         document.body.classList.forEach(c => { if (c.startsWith('theme-')) document.body.classList.remove(c); });
         document.body.classList.add('theme-' + currentResults.mood_category);
         document.body.setAttribute('data-mood', currentResults.mood_category);
-
-        // Input alanlarını gizle ve Yeniden Analiz butonlarını göster
-        if (targetSource === "text") {
-          const tInput = document.getElementById("text-input-container");
-          const tRestart = document.getElementById("text-restart-container");
-          if (tInput) tInput.style.display = "none";
-          if (tRestart) tRestart.style.display = "block";
-        } else if (targetSource === "voice") {
-          const vInput = document.getElementById("voice-input-container");
-          const vRestart = document.getElementById("voice-restart-container");
-          if (vInput) vInput.style.display = "none";
-          if (vRestart) vRestart.style.display = "block";
-        }
       } else {
         if (resultsSection) {
           resultsSection.style.display = "none";
           resultsSection.classList.remove("active");
         }
-        // Temayı kaldır
+        // Temayı kaldır (Normal temaya dön)
         document.body.classList.forEach(c => { if (c.startsWith('theme-')) document.body.classList.remove(c); });
         document.body.removeAttribute('data-mood');
+      }
 
-        // Input alanlarını göster ve Yeniden Analiz butonlarını gizle
-        if (targetSource === "text") {
-          const tInput = document.getElementById("text-input-container");
-          const tRestart = document.getElementById("text-restart-container");
+      // Input alanlarını göster veya Yeniden Analiz butonlarını göster (sadece bu sekme daha önce analiz edilmişse)
+      if (targetSource === "text") {
+        const tInput = document.getElementById("text-input-container");
+        const tRestart = document.getElementById("text-restart-container");
+        if (currentResults && currentResults.source === "text") {
+          if (tInput) tInput.style.display = "none";
+          if (tRestart) tRestart.style.display = "block";
+        } else {
           if (tInput) tInput.style.display = "block";
           if (tRestart) tRestart.style.display = "none";
-        } else if (targetSource === "voice") {
-          const vInput = document.getElementById("voice-input-container");
-          const vRestart = document.getElementById("voice-restart-container");
+        }
+      } else if (targetSource === "voice") {
+        const vInput = document.getElementById("voice-input-container");
+        const vRestart = document.getElementById("voice-restart-container");
+        if (currentResults && currentResults.source === "voice") {
+          if (vInput) vInput.style.display = "none";
+          if (vRestart) vRestart.style.display = "block";
+        } else {
           if (vInput) vInput.style.display = "flex";
           if (vRestart) vRestart.style.display = "none";
         }
       }
-      
+
       // Metin kutusunu temizle (başka sekmeye geçince eski metin kalmasın)
       const textInput = document.getElementById("mood-text-input");
       if (textInput) textInput.value = "";
@@ -323,18 +431,18 @@ function setupMoodActions() {
       } else {
         const cameraArea = document.querySelector("#panel-face .camera-area");
         const cameraControls = document.querySelector("#panel-face .camera-controls");
-        
+
         if (currentResults && currentResults.source === "face") {
-            // Zaten yüzde analiz yapılmış, kamera gizli kalmalı
-            if (cameraArea) cameraArea.style.display = "none";
-            if (cameraControls) cameraControls.style.display = "none";
+          // Zaten yüzde analiz yapılmış, kamera gizli kalmalı
+          if (cameraArea) cameraArea.style.display = "none";
+          if (cameraControls) cameraControls.style.display = "none";
         } else {
-            // Yüz sekmesinde analiz yok, kamerayı göster
-            if (cameraArea) cameraArea.style.display = "";
-            if (cameraControls) cameraControls.style.display = "";
+          // Yüz sekmesinde analiz yok, kamerayı göster
+          if (cameraArea) cameraArea.style.display = "";
+          if (cameraControls) cameraControls.style.display = "";
         }
       }
-      
+
       if (targetSource !== "voice") stopVoiceRecord(true);
     });
   });
@@ -450,11 +558,13 @@ async function refetchRecommendations() {
   }
 
   try {
-    const data = await api.manualMood(lastEmotion || lastMoodCategory, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre, lastRequestedArtist, true); // no_save=true: yenile/filtre için DB'ye kaydetme
+    const data = await api.manualMood(lastEmotion || lastMoodCategory, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre, isArtistFilterActive ? lastRequestedArtist : null, true); // no_save=true: yenile/filtre için DB'ye kaydetme
     currentResults = data;
     // Tema rengi ve mood DEĞIŞTIRILMEZ — ruh hali değişmedi, sadece öneriler yenilendi
     // lastMoodCategory ve lastEmotion güncellenmez, sadece artist güncellenir
-    lastRequestedArtist = data.requested_artist || null;
+    if (isArtistFilterActive) {
+      lastRequestedArtist = data.requested_artist || null;
+    }
     renderContentList(data.recommendations);
   } catch (err) {
     if (contentArea) {
@@ -470,6 +580,7 @@ async function refetchRecommendations() {
 function renderResults(data) {
   // Sync the last requested artist from the analysis results
   lastRequestedArtist = data.requested_artist || null;
+  isArtistFilterActive = !!lastRequestedArtist;
 
   const moodIcons = {
     energetic: "",
@@ -568,8 +679,8 @@ function renderResults(data) {
         <button class="filter-chip ${selectedContentType === 'playlist' ? 'active' : ''}" data-content="playlist">Playlist</button>
         <button class="filter-chip ${selectedContentType === 'podcast' ? 'active' : ''}" data-content="podcast">Podcast</button>
       </div>
-      <div class="filter-divider"></div>
-      <div class="filter-group select-group" style="background: transparent; border: none; padding: 0;">
+      <div class="filter-divider" id="genre-filter-divider" style="display: ${(lastRequestedArtist && isArtistFilterActive) ? 'none' : 'block'};"></div>
+      <div class="filter-group select-group" id="genre-filter-container" style="background: transparent; border: none; padding: 0; display: ${(lastRequestedArtist && isArtistFilterActive) ? 'none' : 'flex'};">
         <div class="custom-genre-dropdown" id="genre-custom-dropdown">
           <div class="dropdown-selected">
             <span id="genre-dropdown-text">Tüm Türler</span>
@@ -593,8 +704,8 @@ function renderResults(data) {
       <div class="filter-divider"></div>
       ${lastRequestedArtist ? `
       <div class="filter-group">
-        <button class="filter-chip active" style="background: var(--primary); border-color: var(--primary); color: #fff; cursor: default; padding-left: 1.2rem; padding-right: 1.2rem;">🎤 Sadece ${DOMPurify.sanitize(lastRequestedArtist)}</button>
-        <button class="filter-chip" id="btn-clear-artist" style="opacity: 0.9;">Tüm Sanatçılar</button>
+        <button class="filter-chip ${isArtistFilterActive ? 'active' : ''}" id="btn-toggle-artist" style="${isArtistFilterActive ? 'background: var(--primary); border-color: var(--primary); color: #fff;' : 'opacity: 0.9;'}">🎤 Sadece ${DOMPurify.sanitize(lastRequestedArtist)}</button>
+        <button class="filter-chip ${!isArtistFilterActive ? 'active' : ''}" id="btn-clear-artist" style="${!isArtistFilterActive ? 'background: var(--primary); border-color: var(--primary); color: #fff;' : 'opacity: 0.9;'}">Tüm Sanatçılar</button>
       </div>
       ` : `
       <div class="filter-group">
@@ -632,8 +743,8 @@ function renderResults(data) {
   // Search event listeners
   const resultsSearchInput = document.getElementById("results-search-input");
   const btnResultsSearch = document.getElementById("btn-results-search");
-  
-  if(resultsSearchInput && btnResultsSearch) {
+
+  if (resultsSearchInput && btnResultsSearch) {
     resultsSearchInput.addEventListener("keypress", (e) => {
       if (e.key === "Enter") {
         lastSearchQuery = resultsSearchInput.value.trim();
@@ -653,7 +764,7 @@ function renderResults(data) {
   if (customDropdown) {
     const selectedText = document.getElementById("genre-dropdown-text");
     const options = customDropdown.querySelectorAll(".dropdown-option");
-    
+
     // Set initial text
     const initialActive = customDropdown.querySelector(".dropdown-option.active");
     if (initialActive) selectedText.textContent = initialActive.textContent;
@@ -670,22 +781,64 @@ function renderResults(data) {
         opt.classList.add("active");
         selectedText.textContent = opt.textContent;
         customDropdown.classList.remove("open");
-        
+
         selectedGenre = opt.dataset.value;
         refetchRecommendations();
       });
     });
   }
 
-  // Clear artist event listener
+  // Clear/Toggle artist event listener
   const btnClearArtist = document.getElementById("btn-clear-artist");
-  if (btnClearArtist) {
+  const btnToggleArtist = document.getElementById("btn-toggle-artist");
+  
+  function updateArtistToggleUI() {
+    if (btnToggleArtist) {
+      btnToggleArtist.className = `filter-chip ${isArtistFilterActive ? 'active' : ''}`;
+      btnToggleArtist.style.background = isArtistFilterActive ? 'var(--primary)' : '';
+      btnToggleArtist.style.borderColor = isArtistFilterActive ? 'var(--primary)' : '';
+      btnToggleArtist.style.color = isArtistFilterActive ? '#fff' : '';
+      btnToggleArtist.style.opacity = isArtistFilterActive ? '1' : '0.9';
+    }
+    if (btnClearArtist) {
+      btnClearArtist.className = `filter-chip ${!isArtistFilterActive ? 'active' : ''}`;
+      btnClearArtist.style.background = !isArtistFilterActive ? 'var(--primary)' : '';
+      btnClearArtist.style.borderColor = !isArtistFilterActive ? 'var(--primary)' : '';
+      btnClearArtist.style.color = !isArtistFilterActive ? '#fff' : '';
+      btnClearArtist.style.opacity = !isArtistFilterActive ? '1' : '0.9';
+    }
+
+    const genreDivider = document.getElementById("genre-filter-divider");
+    const genreContainer = document.getElementById("genre-filter-container");
+    if (genreDivider) genreDivider.style.display = isArtistFilterActive ? 'none' : 'block';
+    if (genreContainer) genreContainer.style.display = isArtistFilterActive ? 'none' : 'flex';
+
+    if (isArtistFilterActive) {
+      selectedGenre = "";
+      const genreText = document.getElementById("genre-dropdown-text");
+      if (genreText) genreText.textContent = "Tüm Türler";
+      document.querySelectorAll("#genre-custom-dropdown .dropdown-option").forEach(opt => {
+        if (opt.dataset.value === "") opt.classList.add("active");
+        else opt.classList.remove("active");
+      });
+    }
+  }
+
+  if (btnClearArtist && btnToggleArtist) {
     btnClearArtist.addEventListener("click", () => {
-      lastRequestedArtist = null;
-      lastSearchQuery = "";
-      const searchInput = document.getElementById("results-search-input");
-      if (searchInput) searchInput.value = "";
-      refetchRecommendations();
+      if (isArtistFilterActive) {
+        isArtistFilterActive = false;
+        updateArtistToggleUI();
+        refetchRecommendations();
+      }
+    });
+
+    btnToggleArtist.addEventListener("click", () => {
+      if (!isArtistFilterActive) {
+        isArtistFilterActive = true;
+        updateArtistToggleUI();
+        refetchRecommendations();
+      }
     });
   }
 
@@ -781,9 +934,9 @@ async function toggleLike(btnElement, trackJSONEncoded) {
     const trackObj = JSON.parse(decodeURIComponent(trackJSONEncoded));
     const isLiked = btnElement.classList.contains("liked");
     const action = isLiked ? "dislike" : "like";
-    
+
     await api.likeTrack(trackObj, action);
-    
+
     if (action === "like") {
       btnElement.classList.add("liked");
       btnElement.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>';
@@ -792,7 +945,7 @@ async function toggleLike(btnElement, trackJSONEncoded) {
       btnElement.classList.remove("liked");
       btnElement.innerHTML = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>';
       showToast("Şarkı beğenilenlerden çıkarıldı", "info");
-      
+
       // If we are currently on the liked page, remove the card from UI
       if (document.getElementById("page-liked").classList.contains("active")) {
         btnElement.closest(".track-card").remove();
@@ -819,11 +972,11 @@ let currentPlayBtn = null;
 function playInSpotifyPlayer(type, id) {
   const container = document.getElementById('spotify-player-container');
   const iframe = document.getElementById('spotify-iframe');
-  
+
   // type = 'track', 'playlist', 'show' (podcast)
   let embedType = type;
-  if(type === 'podcast') embedType = 'show';
-  else if(type === 'playlist') embedType = 'playlist';
+  if (type === 'podcast') embedType = 'show';
+  else if (type === 'playlist') embedType = 'playlist';
   else embedType = 'track';
 
   iframe.src = `https://open.spotify.com/embed/${embedType}/${id}?utm_source=generator&theme=0`;
@@ -843,7 +996,7 @@ function playInSpotifyPlayer(type, id) {
 
 document.addEventListener('DOMContentLoaded', () => {
   const closeBtn = document.getElementById('close-player-btn');
-  if(closeBtn) {
+  if (closeBtn) {
     closeBtn.addEventListener('click', () => {
       document.getElementById('spotify-player-container').classList.remove('active');
       document.getElementById('spotify-iframe').src = "";
@@ -891,7 +1044,7 @@ async function startCamera() {
   const placeholder = document.getElementById("camera-placeholder");
 
   try {
-    cameraStream = await navigator.mediaDevices.getUserMedia({ 
+    cameraStream = await navigator.mediaDevices.getUserMedia({
       video: { facingMode: "user", width: 640, height: 480 },
       audio: false
     });
@@ -935,13 +1088,13 @@ async function captureAndAnalyze() {
   canvas.getContext("2d").drawImage(video, 0, 0);
   const base64 = canvas.toDataURL("image/jpeg").split(",")[1];
   lastCapturedFaceBase64 = base64;
-  
+
   const scanOverlay = document.querySelector(".scan-overlay");
   if (scanOverlay) scanOverlay.classList.add("scanning");
   video.pause();
 
   lastSearchQuery = ""; // Kameradan yüz arandığında aramayı sıfırla
-  
+
   try {
     await performAnalysis(() => api.analyzeFace(base64, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre), document.getElementById("btn-capture"));
     // Başarılı analizden sonra kamera alanını gizle
@@ -960,25 +1113,26 @@ function resetFacePanel() {
   const cameraControls = document.querySelector("#panel-face .camera-controls");
   if (cameraArea) cameraArea.style.display = ""; // CSS'teki varsayılan (flex) değerine döner
   if (cameraControls) cameraControls.style.display = ""; // CSS'teki varsayılan (flex) değerine döner
-  
+
   const resultsSection = document.getElementById("results-section");
   if (resultsSection) {
     resultsSection.innerHTML = "";
     resultsSection.classList.remove("active");
   }
-  
-  // Önemli: currentResults'ı temizle ki sekme geçişlerinde eski sonuç var sanılmasın
+
+  // Yeni bir analize başlandığı için sonuçları sıfırla
   currentResults = null;
   lastCapturedFaceBase64 = null;
-  
+
+  // Başka bir analiz yapınca normal tema rengine dönsün
   document.body.classList.forEach(c => { if (c.startsWith('theme-')) document.body.classList.remove(c); });
   document.body.removeAttribute('data-mood');
-  
+
   // Kamerayı otomatik başlatabiliriz
   startCamera();
 }
 
-window.resetTextPanel = function(clearText = true) {
+window.resetTextPanel = function (clearText = true) {
   const tInput = document.getElementById("text-input-container");
   const tRestart = document.getElementById("text-restart-container");
   if (tInput) tInput.style.display = "block";
@@ -990,11 +1144,11 @@ window.resetTextPanel = function(clearText = true) {
       resultsSection.innerHTML = "";
       resultsSection.classList.remove("active");
     }
-    
+
     currentResults = null;
     document.body.classList.forEach(c => { if (c.startsWith('theme-')) document.body.classList.remove(c); });
     document.body.removeAttribute('data-mood');
-    
+
     const textInputArea = document.getElementById("mood-text-input");
     if (textInputArea) {
       textInputArea.value = "";
@@ -1003,7 +1157,7 @@ window.resetTextPanel = function(clearText = true) {
   }
 };
 
-window.resetVoicePanel = function() {
+window.resetVoicePanel = function () {
   const vInput = document.getElementById("voice-input-container");
   const vRestart = document.getElementById("voice-restart-container");
   if (vInput) vInput.style.display = "flex";
@@ -1014,11 +1168,11 @@ window.resetVoicePanel = function() {
     resultsSection.innerHTML = "";
     resultsSection.classList.remove("active");
   }
-  
+
   currentResults = null;
   document.body.classList.forEach(c => { if (c.startsWith('theme-')) document.body.classList.remove(c); });
   document.body.removeAttribute('data-mood');
-  
+
   const statusLabel = document.getElementById("voice-status-label");
   if (statusLabel) statusLabel.textContent = "Sesinizi analiz etmek için mikrofona dokunun";
 };
@@ -1033,9 +1187,9 @@ async function loadHistory(append = false) {
   const analyticsPanel = document.getElementById("analytics-panel");
   const listTitle = document.getElementById("history-list-title");
 
-    if (!append) {
-      currentHistorySkip = 0;
-      container.innerHTML = `
+  if (!append) {
+    currentHistorySkip = 0;
+    container.innerHTML = `
         <div class="history-list">
           ${Array(HISTORY_LIMIT).fill(`
             <div class="history-card">
@@ -1049,17 +1203,17 @@ async function loadHistory(append = false) {
             </div>
           `).join('')}
         </div>`;
-    } else {
-      const loadBtn = document.getElementById("btn-load-more-history");
-      if (loadBtn) loadBtn.textContent = "Yükleniyor...";
-    }
+  } else {
+    const loadBtn = document.getElementById("btn-load-more-history");
+    if (loadBtn) loadBtn.textContent = "Yükleniyor...";
+  }
 
   try {
     const history = await api.getHistory(currentHistorySkip, HISTORY_LIMIT);
     if (!append && !history.length) {
       if (analyticsPanel) analyticsPanel.style.display = "none";
       if (listTitle) listTitle.style.display = "none";
-      
+
       container.innerHTML = `
         <div class="empty-state">
           <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="opacity: 0.5; margin-bottom: 1rem;"><circle cx="12" cy="12" r="10"></circle><polyline points="12 6 12 12 16 14"></polyline></svg>
@@ -1075,24 +1229,24 @@ async function loadHistory(append = false) {
       const select = document.getElementById("analytics-days-select");
       const days = select ? parseInt(select.value, 10) : 30;
       loadAnalytics(days);
-      
+
       container.innerHTML = '<div class="history-items-container"></div>';
     }
 
     const itemsContainer = container.querySelector('.history-items-container') || container;
 
-    const moodIcons = { 
-      energetic: "⚡", 
-      calm: "🍃", 
-      intense: "🔥", 
-      chill: "🏝️", 
-      melancholic: "🌧️" 
+    const moodIcons = {
+      energetic: "⚡",
+      calm: "🍃",
+      intense: "🔥",
+      chill: "🏝️",
+      melancholic: "🌧️"
     };
 
     const htmlString = history.map((item, i) => {
-          const safeEmotion = DOMPurify.sanitize(item.emotion);
-          const safeSource = DOMPurify.sanitize(item.source);
-          return `
+      const safeEmotion = DOMPurify.sanitize(item.emotion);
+      const safeSource = DOMPurify.sanitize(item.source);
+      return `
       <div class="history-card" style="animation-delay: ${i * 0.05}s">
         <div class="history-mood">
           <span class="history-icon">${moodIcons[item.mood_category] || "🎵"}</span>
@@ -1116,10 +1270,10 @@ async function loadHistory(append = false) {
     } else {
       itemsContainer.insertAdjacentHTML('beforeend', htmlString);
     }
-    
+
     const oldBtn = document.getElementById("btn-load-more-history");
     if (oldBtn) oldBtn.remove();
-    
+
     if (history.length === HISTORY_LIMIT) {
       const btnHtml = `<button id="btn-load-more-history" class="btn btn-outline" style="width: 100%; margin-top: 1rem;" onclick="loadMoreHistory()">Daha Fazla Yükle</button>`;
       container.insertAdjacentHTML('beforeend', btnHtml);
@@ -1160,35 +1314,35 @@ async function deleteHistoryItem(id, btn) {
 async function loadAnalytics(days = 30) {
   try {
     const data = await api.getHistoryAnalytics(days);
-    
+
     const totalCount = data.length;
     document.getElementById("stat-total").textContent = totalCount;
-    
+
     if (totalCount === 0) {
       document.getElementById("stat-common-mood").textContent = "-";
       document.getElementById("stat-avg-confidence").textContent = "%0";
       document.getElementById("stat-pref-source").textContent = "-";
-      
+
       if (moodDistChartInstance) { moodDistChartInstance.destroy(); moodDistChartInstance = null; }
       if (moodTrendChartInstance) { moodTrendChartInstance.destroy(); moodTrendChartInstance = null; }
       return;
     }
-    
+
     let totalConfidence = 0;
     const moodCounts = {};
     const sourceCounts = {};
     const dailyCounts = {};
-    
+
     data.forEach(item => {
       totalConfidence += item.confidence || 0;
       moodCounts[item.mood_category] = (moodCounts[item.mood_category] || 0) + 1;
       sourceCounts[item.source] = (sourceCounts[item.source] || 0) + 1;
       dailyCounts[item.date] = (dailyCounts[item.date] || 0) + 1;
     });
-    
+
     const avgConfidence = totalConfidence / totalCount;
     document.getElementById("stat-avg-confidence").textContent = `%${avgConfidence.toFixed(1)}`;
-    
+
     const moodLabelsTR = {
       energetic: "Enerjik",
       calm: "Sakin",
@@ -1196,7 +1350,7 @@ async function loadAnalytics(days = 30) {
       chill: "Rahat",
       melancholic: "Hüzünlü"
     };
-    
+
     let mostCommonCategory = "-";
     let maxMoodCount = 0;
     Object.keys(moodCounts).forEach(m => {
@@ -1206,7 +1360,7 @@ async function loadAnalytics(days = 30) {
       }
     });
     document.getElementById("stat-common-mood").textContent = mostCommonCategory;
-    
+
     const sourceLabelsTR = {
       text: "Metin",
       face: "Fotoğraf",
@@ -1222,9 +1376,9 @@ async function loadAnalytics(days = 30) {
       }
     });
     document.getElementById("stat-pref-source").textContent = prefSource;
-    
+
     renderAnalyticsCharts(moodCounts, dailyCounts, days);
-    
+
   } catch (err) {
     console.error("Analiz verisi yüklenirken hata:", err);
   }
@@ -1238,7 +1392,7 @@ function renderAnalyticsCharts(moodCounts, dailyCounts, days) {
     chill: "#4aba7a",
     melancholic: "#6b8fd9"
   };
-  
+
   const moodLabelsTR = {
     energetic: "Enerjik",
     calm: "Sakin",
@@ -1253,12 +1407,12 @@ function renderAnalyticsCharts(moodCounts, dailyCounts, days) {
     if (moodDistChartInstance) {
       moodDistChartInstance.destroy();
     }
-    
+
     const categories = Object.keys(moodCounts);
     const counts = Object.values(moodCounts);
     const bgColors = categories.map(cat => moodColors[cat] || "#1db954");
     const labels = categories.map(cat => moodLabelsTR[cat] || cat);
-    
+
     moodDistChartInstance = new Chart(distCanvas, {
       type: "doughnut",
       data: {
@@ -1287,7 +1441,7 @@ function renderAnalyticsCharts(moodCounts, dailyCounts, days) {
           },
           tooltip: {
             callbacks: {
-              label: function(context) {
+              label: function (context) {
                 const total = context.dataset.data.reduce((a, b) => a + b, 0);
                 const val = context.raw;
                 const percentage = ((val / total) * 100).toFixed(1);
@@ -1307,15 +1461,15 @@ function renderAnalyticsCharts(moodCounts, dailyCounts, days) {
     if (moodTrendChartInstance) {
       moodTrendChartInstance.destroy();
     }
-    
+
     let labels = [];
     let dataPoints = [];
-    
+
     // Son X günden geriye doğru tarihleri üretelim
     const end = new Date();
     const start = new Date();
     start.setDate(end.getDate() - days + 1);
-    
+
     const current = new Date(start);
     while (current <= end) {
       const dateStr = current.toISOString().split("T")[0];
@@ -1323,7 +1477,7 @@ function renderAnalyticsCharts(moodCounts, dailyCounts, days) {
       dataPoints.push(dailyCounts[dateStr] || 0);
       current.setDate(current.getDate() + 1);
     }
-    
+
     moodTrendChartInstance = new Chart(trendCanvas, {
       type: "bar",
       data: {
@@ -1490,6 +1644,7 @@ let audioSourceNode = null;
 
 function setupVoiceActions() {
   const micBtn = document.getElementById("btn-mic-record");
+  const cancelBtn = document.getElementById("btn-mic-cancel");
   if (!micBtn) return;
   micBtn.addEventListener("click", () => {
     if (micBtn.classList.contains("recording")) {
@@ -1498,6 +1653,13 @@ function setupVoiceActions() {
       startVoiceRecord();
     }
   });
+  if (cancelBtn) {
+    cancelBtn.addEventListener("click", () => {
+      if (micBtn.classList.contains("recording")) {
+        stopVoiceRecord(true);
+      }
+    });
+  }
 }
 
 async function startVoiceRecord() {
@@ -1509,7 +1671,7 @@ async function startVoiceRecord() {
   try {
     const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
     voiceChunks = [];
-    
+
     let options = { mimeType: 'audio/webm;codecs=opus' };
     try {
       voiceRecorder = new MediaRecorder(stream, options);
@@ -1525,27 +1687,38 @@ async function startVoiceRecord() {
 
     voiceRecorder.onstop = async () => {
       stream.getTracks().forEach(t => t.stop());
-      
-      if (voiceChunks.length === 0) return;
-      
+      const cancelBtn = document.getElementById("btn-mic-cancel");
+      if (cancelBtn) cancelBtn.style.display = "none";
+
+      if (voiceChunks.length === 0) {
+        micBtn.classList.remove("recording");
+        if (visualizer) visualizer.classList.remove("active");
+        if (timerEl) timerEl.style.display = "none";
+        statusLabel.textContent = "Sesinizi analiz etmek için mikrofona dokunun";
+        return;
+      }
+
       const blob = new Blob(voiceChunks, { type: (voiceRecorder && voiceRecorder.mimeType) ? voiceRecorder.mimeType : 'audio/webm' });
       const reader = new FileReader();
       reader.onloadend = async () => {
         const base64 = reader.result.split(',')[1];
-        
+
         micBtn.classList.remove("recording");
         if (visualizer) visualizer.classList.remove("active");
         if (timerEl) timerEl.style.display = "none";
         statusLabel.textContent = "Sesiniz analiz ediliyor...";
-        
+
         lastSearchQuery = "";
-        await performAnalysis(() => api.analyzeAudio(base64, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre));
+        await performAnalysis(() => api.analyzeAudio(base64, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre), micBtn);
         statusLabel.textContent = "Sesinizi analiz etmek için mikrofona dokunun";
       };
       reader.readAsDataURL(blob);
     };
 
+    const cancelBtn = document.getElementById("btn-mic-cancel");
+    
     micBtn.classList.add("recording");
+    if (cancelBtn) cancelBtn.style.display = "block";
     if (visualizer) visualizer.classList.add("active");
     if (timerEl) {
       timerEl.style.display = "block";
@@ -1571,7 +1744,7 @@ async function startVoiceRecord() {
         if (!analyserNode) return;
         audioVisualizerFrame = requestAnimationFrame(drawVisualizer);
         analyserNode.getByteFrequencyData(dataArray);
-        
+
         if (bars.length > 0) {
           const step = Math.max(1, Math.floor(bufferLength / bars.length));
           bars.forEach((bar, i) => {
@@ -1620,7 +1793,7 @@ function stopVoiceRecord(cancel = false) {
     clearTimeout(voiceRecordTimeout);
     voiceRecordTimeout = null;
   }
-  
+
   if (audioVisualizerFrame) {
     cancelAnimationFrame(audioVisualizerFrame);
     audioVisualizerFrame = null;
@@ -1634,7 +1807,7 @@ function stopVoiceRecord(cancel = false) {
     audioContext = null;
   }
   analyserNode = null;
-  
+
   // Reset bar heights
   const bars = document.querySelectorAll(".visualizer-bar");
   bars.forEach(bar => {
@@ -1667,9 +1840,9 @@ function stopVoiceRecord(cancel = false) {
 function updateSpotifyStatus() {
   const dot = document.getElementById("spotify-status-dot");
   const btn = document.getElementById("btn-sidebar-link-spotify");
-  
+
   if (!currentUser || !dot || !btn) return;
-  
+
   if (currentUser.spotify_connected) {
     dot.classList.add("linked");
     btn.classList.add("linked");
@@ -1679,7 +1852,7 @@ function updateSpotifyStatus() {
     btn.classList.remove("linked");
     btn.textContent = "Bağla";
   }
-  
+
   btn.onclick = () => {
     if (currentUser.spotify_connected) {
       showToast("Spotify hesabınız zaten bağlı.", "info");
@@ -1703,10 +1876,10 @@ function setupExportModalActions() {
   const confirmBtn = document.getElementById("btn-confirm-export");
   const saveInternalBtn = document.getElementById("btn-save-internal");
   const copyTracksBtn = document.getElementById("btn-copy-tracks");
-  
+
   if (closeBtn) closeBtn.addEventListener("click", closeExportModal);
   if (cancelBtn) cancelBtn.addEventListener("click", closeExportModal);
-  
+
   if (copyTracksBtn) {
     copyTracksBtn.addEventListener("click", async () => {
       if (!activeMoodHistoryIdForExport) return;
@@ -1714,33 +1887,33 @@ function setupExportModalActions() {
         const historyData = await api.getMoodHistory();
         const historyItem = historyData.find(h => h.id === activeMoodHistoryIdForExport);
         if (historyItem && historyItem.recommended_tracks) {
-            const textToCopy = historyItem.recommended_tracks.map((t, i) => `${i+1}. ${t.track_name} - ${t.artist_name}`).join("\n");
-            try {
-                await navigator.clipboard.writeText(textToCopy);
-            } catch (e) {
-                const textArea = document.createElement("textarea");
-                textArea.value = textToCopy;
-                document.body.appendChild(textArea);
-                textArea.focus();
-                textArea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textArea);
-            }
-            showToast("Şarkı listesi başarıyla kopyalandı! 🎉", "success");
+          const textToCopy = historyItem.recommended_tracks.map((t, i) => `${i + 1}. ${t.track_name} - ${t.artist_name}`).join("\n");
+          try {
+            await navigator.clipboard.writeText(textToCopy);
+          } catch (e) {
+            const textArea = document.createElement("textarea");
+            textArea.value = textToCopy;
+            document.body.appendChild(textArea);
+            textArea.focus();
+            textArea.select();
+            document.execCommand('copy');
+            document.body.removeChild(textArea);
+          }
+          showToast("Şarkı listesi başarıyla kopyalandı! 🎉", "success");
         } else {
-            showToast("Kopyalanacak şarkı bulunamadı.", "warning");
+          showToast("Kopyalanacak şarkı bulunamadı.", "warning");
         }
       } catch (err) {
-          showToast("Kopyalama başarısız oldu.", "error");
+        showToast("Kopyalama başarısız oldu.", "error");
       }
     });
   }
-  
+
   if (saveInternalBtn) {
     saveInternalBtn.addEventListener("click", async () => {
       const nameInput = document.getElementById("playlist-name-input");
       const playlistName = nameInput ? nameInput.value.trim() : "";
-      
+
       const errorEl = document.getElementById("modal-error-message");
       const showError = (msg) => { if (errorEl) { errorEl.textContent = msg; errorEl.style.display = "block"; } else showToast(msg, "warning"); };
       if (errorEl) errorEl.style.display = "none";
@@ -1749,7 +1922,7 @@ function setupExportModalActions() {
         showError("Lütfen geçerli bir çalma listesi adı girin.");
         return;
       }
-      
+
       if (!activeMoodHistoryIdForExport) {
         showError("Ruh hali geçmiş kaydı bulunamadı.");
         return;
@@ -1759,10 +1932,10 @@ function setupExportModalActions() {
         showError("Bu çalma listesi zaten uygulamaya kaydedilmiş.");
         return;
       }
-      
+
       saveInternalBtn.disabled = true;
       saveInternalBtn.innerHTML = '<span class="spinner"></span> Kaydediliyor...';
-      
+
       try {
         await api.saveInternalPlaylist(activeMoodHistoryIdForExport, playlistName);
         savedInternalPlaylistIds.add(activeMoodHistoryIdForExport);
@@ -1781,7 +1954,7 @@ function setupExportModalActions() {
     confirmBtn.addEventListener("click", async () => {
       const nameInput = document.getElementById("playlist-name-input");
       const playlistName = nameInput ? nameInput.value.trim() : "";
-      
+
       const errorEl = document.getElementById("modal-error-message");
       const showError = (msg) => { if (errorEl) { errorEl.textContent = msg; errorEl.style.display = "block"; } else showToast(msg, "warning"); };
       if (errorEl) errorEl.style.display = "none";
@@ -1790,31 +1963,31 @@ function setupExportModalActions() {
         showError("Lütfen geçerli bir çalma listesi adı girin.");
         return;
       }
-      
+
       if (!currentUser || !currentUser.is_spotify_connected) {
         showError("Spotify hesabınız bağlı değil. Lütfen sol menüden Spotify hesabınızı bağlayın.");
         return;
       }
-      
+
       if (!activeMoodHistoryIdForExport) {
         showError("Ruh hali geçmiş kaydı bulunamadı.");
         return;
       }
-      
+
       if (exportedSpotifyPlaylistIds.has(activeMoodHistoryIdForExport)) {
         showError("Bu çalma listesi zaten Spotify'a aktarılmış.");
         return;
       }
-      
+
       confirmBtn.disabled = true;
       confirmBtn.innerHTML = '<span class="spinner"></span> Aktarılıyor...';
-      
+
       try {
         const result = await api.exportPlaylist(activeMoodHistoryIdForExport, playlistName);
         exportedSpotifyPlaylistIds.add(activeMoodHistoryIdForExport);
         showToast("Çalma listesi Spotify kütüphanenize eklendi! 🎉", "success");
         closeExportModal();
-        
+
         setTimeout(() => {
           if (result.playlist_url) {
             window.open(result.playlist_url, "_blank");
@@ -1837,12 +2010,12 @@ function setupExportModalActions() {
 function openExportModal(moodHistoryId, emotion) {
   activeMoodHistoryIdForExport = moodHistoryId;
   const nameInput = document.getElementById("playlist-name-input");
-  
+
   if (nameInput) {
     const today = new Date().toLocaleDateString("tr-TR", { month: "short", day: "numeric" });
     nameInput.value = `EmoTune - ${emotion || "Müzik"} [${today}]`;
   }
-  
+
   const modal = document.getElementById("spotify-export-modal");
   if (modal) modal.classList.add("active");
 }
@@ -1860,15 +2033,15 @@ function loadProfilePage() {
   const emailInput = document.getElementById("profile-email");
   const avatarFileInput = document.getElementById("profile-avatar-file");
   const avatarPreview = document.getElementById("profile-avatar-preview");
-  
+
   usernameInput.value = currentUser.username || currentUser.email;
   if (emailInput) {
     emailInput.value = currentUser.email;
   }
   // File inputs cannot be pre-filled with a value for security reasons.
-  
+
   const initial = (currentUser.username || currentUser.email || "U").trim().charAt(0).toUpperCase();
-  
+
   function updateAvatarPreview(url) {
     if (url) {
       avatarPreview.innerHTML = `<img src="${API_BASE}${url}" alt="Avatar" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
@@ -1876,7 +2049,7 @@ function loadProfilePage() {
       avatarPreview.textContent = initial;
     }
   }
-  
+
   updateAvatarPreview(api.getAvatar() || currentUser.avatar_url);
 
   // Global variable to hold the resized file
@@ -1890,19 +2063,19 @@ function loadProfilePage() {
         img.onload = () => {
           let width = img.width;
           let height = img.height;
-          
+
           if (width > maxWidth || height > maxHeight) {
             const ratio = Math.min(maxWidth / width, maxHeight / height);
             width = width * ratio;
             height = height * ratio;
           }
-          
+
           const canvas = document.createElement("canvas");
           canvas.width = width;
           canvas.height = height;
           const ctx = canvas.getContext("2d");
           ctx.drawImage(img, 0, 0, width, height);
-          
+
           canvas.toBlob((blob) => {
             resolve(new File([blob], file.name, { type: file.type || "image/jpeg" }));
           }, file.type || "image/jpeg", 0.85); // Compress quality to 85%
@@ -1917,14 +2090,14 @@ function loadProfilePage() {
   avatarFileInput.onchange = async () => {
     if (avatarFileInput.files && avatarFileInput.files[0]) {
       const originalFile = avatarFileInput.files[0];
-      
+
       // Temporarily show a loading state in avatar preview
       avatarPreview.innerHTML = '<span class="spinner" style="border-top-color: var(--primary);"></span>';
-      
+
       try {
         // Resize to max 500x500 for avatar
         resizedAvatarFile = await resizeImageFile(originalFile, 500, 500);
-        
+
         // Show preview of resized file
         const reader = new FileReader();
         reader.onload = (e) => {
@@ -1976,14 +2149,14 @@ function loadProfilePage() {
         currentUser.avatar_url = uploadRes.avatar_url;
         api.setAvatar(uploadRes.avatar_url || "");
       }
-      
+
       // Handle username update
       const res = await api.updateProfile(usernameInput.value.trim(), currentUser.avatar_url || "");
       currentUser = res;
       api.setAvatar(res.avatar_url || "");
-      
+
       showToast("Profil bilgileriniz güncellendi! 🎉", "success");
-      
+
       // Update sidebar avatar
       document.getElementById("user-greeting").textContent = currentUser.username || currentUser.email;
       const avatarEl = document.getElementById("user-avatar");
@@ -2017,13 +2190,13 @@ function loadProfilePage() {
     const currentPwd = document.getElementById("profile-current-password").value;
     const newPwd = document.getElementById("profile-new-password").value.trim();
     const errEl = document.getElementById("profile-password-error");
-    
+
     errEl.textContent = "";
     if (newPwd.length < 6) {
       errEl.textContent = "Yeni şifre en az 6 karakter olmalıdır.";
       return;
     }
-    
+
     savePwdBtn.disabled = true;
     savePwdBtn.innerHTML = '<span class="spinner"></span> Güncelleniyor...';
     try {
@@ -2041,38 +2214,38 @@ function loadProfilePage() {
 }
 
 // ── Polaroid İndirme ─────────────────────────────────────────────────────────
-window.downloadPolaroid = async function(btn) {
+window.downloadPolaroid = async function (btn) {
   if (typeof html2canvas === "undefined") {
     showToast("İndirme modülü yükleniyor, lütfen bekleyin.", "warning");
     return;
   }
-  
+
   const card = btn.closest(".polaroid-card");
   if (!card) return;
-  
+
   const originalDisplay = btn.style.display;
   btn.style.display = "none";
-  
+
   const originalTransform = card.style.transform;
   card.style.transform = "none"; // Rotate iptal
-  
+
   const originalBoxShadow = card.style.boxShadow;
   card.style.boxShadow = "none"; // İndirilen resimde gölge olmasın
-  
+
   const originalPadding = card.style.padding;
   card.style.padding = "15px 15px 30px 15px"; // Kesin görünmesi için inline padding
-  
+
   const tint = card.querySelector('.polaroid-tint');
   let originalMixBlend = '';
   let originalOpacity = '';
   if (tint) {
-      // html2canvas mix-blend-mode desteklemediği için normal opacity ile sahte bir filtre oluşturuyoruz
-      originalMixBlend = tint.style.mixBlendMode;
-      originalOpacity = tint.style.opacity;
-      tint.style.mixBlendMode = 'normal';
-      tint.style.opacity = '0.2';
+    // html2canvas mix-blend-mode desteklemediği için normal opacity ile sahte bir filtre oluşturuyoruz
+    originalMixBlend = tint.style.mixBlendMode;
+    originalOpacity = tint.style.opacity;
+    tint.style.mixBlendMode = 'normal';
+    tint.style.opacity = '0.2';
   }
-  
+
   try {
     const canvas = await html2canvas(card, {
       scale: 3, // Daha yüksek çözünürlük
@@ -2080,12 +2253,12 @@ window.downloadPolaroid = async function(btn) {
       useCORS: true,
       logging: false
     });
-    
+
     const link = document.createElement("a");
     link.download = `emotuneai-hatira-${Date.now()}.png`;
     link.href = canvas.toDataURL("image/png");
     link.click();
-    
+
     showToast("Hatıra kartı indirildi! 🎉", "success");
   } catch (err) {
     showToast("İndirme başarısız oldu.", "error");
@@ -2095,10 +2268,10 @@ window.downloadPolaroid = async function(btn) {
     card.style.transform = originalTransform;
     card.style.boxShadow = originalBoxShadow;
     card.style.padding = originalPadding;
-    
+
     if (tint) {
-        tint.style.mixBlendMode = originalMixBlend;
-        tint.style.opacity = originalOpacity;
+      tint.style.mixBlendMode = originalMixBlend;
+      tint.style.opacity = originalOpacity;
     }
   }
 };
@@ -2112,7 +2285,7 @@ async function loadSavedPlaylists() {
 
   try {
     const playlists = await api.getSavedPlaylists();
-    
+
     if (!playlists || playlists.length === 0) {
       container.innerHTML = `
         <div class="empty-state">
@@ -2126,14 +2299,14 @@ async function loadSavedPlaylists() {
       const date = new Date(p.created_at).toLocaleDateString("tr-TR", {
         year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit'
       });
-      
+
       const safeName = DOMPurify.sanitize(p.name);
-      
+
       let tracksHtml = p.tracks.map((t, index) => {
         const safeTrackName = DOMPurify.sanitize(t.track_name);
         const safeArtistName = DOMPurify.sanitize(t.artist_name);
         const safeImageUrl = t.image_url ? DOMPurify.sanitize(t.image_url) : 'https://placehold.co/50x50?text=🎵';
-        
+
         return `
           <div style="display: flex; align-items: center; gap: 12px; font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 8px; padding-bottom: 8px; border-bottom: 1px solid rgba(255,255,255,0.05); transition: background-color 0.2s ease; border-radius: 6px; padding: 6px;">
             <div style="opacity: 0.5; width: 20px; text-align: center; font-size: 0.8rem;">${index + 1}</div>
@@ -2147,7 +2320,7 @@ async function loadSavedPlaylists() {
             </a>` : ''}
           </div>`;
       }).join("");
-      
+
       let exportBtnHtml = "";
       // If user is connected to Spotify, show Export button
       if (currentUser && currentUser.spotify_connected) {
@@ -2170,7 +2343,7 @@ async function loadSavedPlaylists() {
           </button>
         `;
       }
-      
+
       return `
         <div class="playlist-card" style="background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; padding: 1.5rem; margin-bottom: 1rem; position: relative;">
           <button class="btn-icon" onclick="deleteSavedPlaylist(${p.id}, this)" title="Sil" style="position: absolute; top: 1rem; right: 1rem; color: var(--error);">
@@ -2194,16 +2367,16 @@ async function loadSavedPlaylists() {
 
 async function deleteSavedPlaylist(id, btn) {
   if (!confirm("Bu çalma listesini silmek istediğinize emin misiniz?")) return;
-  
+
   const card = btn.closest(".playlist-card");
   card.style.opacity = "0.5";
   btn.disabled = true;
-  
+
   try {
     await api.deleteSavedPlaylist(id);
     showToast("Çalma listesi silindi.", "success");
     card.remove();
-    
+
     const container = document.getElementById("saved-playlists-container");
     if (container.children.length === 0) {
       loadSavedPlaylists(); // reload empty state
@@ -2219,11 +2392,11 @@ async function exportSavedPlaylistToSpotify(id, btn) {
   const originalText = btn.innerHTML;
   btn.disabled = true;
   btn.innerHTML = '<span class="spinner"></span> Aktarılıyor...';
-  
+
   try {
     const result = await api.exportSavedPlaylist(id);
     showToast("Çalma listesi Spotify kütüphanenize eklendi! 🎉", "success");
-    
+
     setTimeout(() => {
       if (result.playlist_url) {
         window.open(result.playlist_url, "_blank");
@@ -2248,7 +2421,7 @@ async function copyPlaylistTracks(id, btn) {
     const playlists = await api.getSavedPlaylists();
     const p = playlists.find(x => x.id === id);
     if (p && p.tracks) {
-      const textToCopy = p.tracks.map((t, i) => `${i+1}. ${t.track_name} - ${t.artist_name}`).join("\\n");
+      const textToCopy = p.tracks.map((t, i) => `${i + 1}. ${t.track_name} - ${t.artist_name}`).join("\\n");
       try {
         await navigator.clipboard.writeText(textToCopy);
       } catch (e) {
@@ -2276,14 +2449,14 @@ function setupTheme() {
   const toggleBtn = document.getElementById("btn-theme-toggle");
   const themeText = document.getElementById("theme-text");
   const themeIcon = document.getElementById("theme-icon");
-  
+
   const toggleBtnMobile = document.getElementById("btn-theme-toggle-mobile");
   const themeTextMobile = document.getElementById("theme-text-mobile");
   const themeIconMobile = document.getElementById("theme-icon-mobile");
-  
+
   // Load saved theme
   const savedTheme = localStorage.getItem("emotune_theme") || "dark";
-  
+
   const applyTheme = (theme) => {
     if (theme === "light") {
       document.body.classList.add("theme-light");
@@ -2300,9 +2473,9 @@ function setupTheme() {
       if (themeIconMobile) themeIconMobile.innerHTML = sunSvg;
     }
   };
-  
+
   applyTheme(savedTheme);
-  
+
   const handleToggle = () => {
     const isLight = document.body.classList.contains("theme-light");
     const newTheme = isLight ? "dark" : "light";
