@@ -17,14 +17,14 @@ logger = logging.getLogger(__name__)
 # ── Gemini AI Kurulumu ────────────────────────────────────────────────────────
 
 genai.configure(api_key=settings.GEMINI_API_KEY)
+
 gemini_model_35 = genai.GenerativeModel("gemini-3.5-flash")
-gemini_model_30 = genai.GenerativeModel("gemini-3-flash")
 gemini_model_31_lite = genai.GenerativeModel("gemini-3.1-flash-lite")
 gemini_model_25 = genai.GenerativeModel("gemini-2.5-flash")
 gemini_model_25_lite = genai.GenerativeModel("gemini-2.5-flash-lite")
 
-# Öncelik sırası: 3.5-flash → 3-flash → 3.1-flash-lite → 2.5-flash → 2.5-flash-lite
-GEMINI_MODELS = [gemini_model_35, gemini_model_30, gemini_model_31_lite, gemini_model_25, gemini_model_25_lite]
+# Öncelik sırası: 3.5-flash -> 3.1-flash-lite -> 2.5-flash -> 2.5-flash-lite
+GEMINI_MODELS = [gemini_model_35, gemini_model_31_lite, gemini_model_25, gemini_model_25_lite]
 
 # Retry ayarları
 MAX_RETRIES = 1

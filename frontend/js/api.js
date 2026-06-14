@@ -184,13 +184,6 @@ class EmoTuneAPI {
     });
   }
 
-  async saveInternalPlaylist(moodHistoryId, playlistName) {
-    return this.request("/api/music/save-internal-playlist", {
-      method: "POST",
-      body: JSON.stringify({ mood_history_id: moodHistoryId, playlist_name: playlistName }),
-    });
-  }
-
   async getSavedPlaylists() {
     return this.request("/api/music/saved-playlists");
   }

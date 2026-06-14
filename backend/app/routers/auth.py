@@ -108,11 +108,7 @@ def spotify_callback(request: Request, db: Session = Depends(get_db)):
         sp = spotipy.Spotify(auth=access_token)
         user_info = sp.current_user()
         if user_info:
-            print("=========== SPOTIFY DEBUG ===========", flush=True)
-            print(f"Spotify ID: {user_info.get('id')}", flush=True)
-            print(f"Spotify Email: {user_info.get('email')}", flush=True)
-            print(f"Spotify Display Name: {user_info.get('display_name')}", flush=True)
-            print("=====================================", flush=True)
+            logger.info(f"Spotify kullanıcısı alındı: {user_info.get('id')}")
         
         email = user_info.get("email") if user_info else None
         if not email:

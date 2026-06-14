@@ -208,13 +208,29 @@ MOOD_GENRE_QUERIES = {
     },
 }
 
-# Tür belirtilmemişse kullanılacak genel sorgular
+# Tür belirtilmemişse kullanılacak genel sorgular (Dil bazlı)
 MOOD_DEFAULT_QUERIES = {
-    "energetic":   ["pop hits", "party dance hits", "upbeat pop", "dans pop hits"],
-    "calm":        ["akustik pop slow", "soft acoustic", "sakin pop", "slow akustik"],
-    "intense":     ["rock anthems", "power rock metal", "aggressive rap", "sert rap"],
-    "chill":       ["chill lofi beats", "chill pop hits", "easy listening pop", "akşam keyfi lofi"],
-    "melancholic": ["duygusal slow pop", "sad indie ballad", "hüzünlü slow", "slow şarkılar"],
+    "tr": {
+        "energetic":   ["türkçe hareketli", "türkçe hit", "türkçe dans", "türkçe coşkulu pop"],
+        "calm":        ["türkçe akustik", "türkçe sakin", "türkçe slow", "türkçe huzurlu"],
+        "intense":     ["türkçe rock", "türkçe sert rap", "türkçe metal", "türkçe agresif"],
+        "chill":       ["türkçe alternatif", "akşam keyfi", "türkçe rahatlatıcı", "türkçe lo-fi"],
+        "melancholic": ["türkçe duygusal slow", "türkçe hüzünlü", "türkçe damar", "türkçe ayrılık"]
+    },
+    "en": {
+        "energetic":   ["pop hits", "party dance", "upbeat pop", "club hits"],
+        "calm":        ["soft acoustic", "calm pop", "peaceful", "slow acoustic"],
+        "intense":     ["rock anthems", "power rock", "aggressive rap", "heavy metal"],
+        "chill":       ["chill lofi beats", "easy listening pop", "chill vibes", "lofi hip hop"],
+        "melancholic": ["sad indie", "melancholy pop", "heartbreak ballad", "sad songs"]
+    },
+    "mixed": {
+        "energetic":   ["pop hits", "dans", "upbeat pop", "hareketli pop"],
+        "calm":        ["akustik pop", "soft acoustic", "sakin", "peaceful"],
+        "intense":     ["rock anthems", "sert rap", "aggressive rap", "power rock"],
+        "chill":       ["chill lofi", "akşam keyfi", "easy listening", "lofi"],
+        "melancholic": ["duygusal slow", "sad indie", "hüzünlü", "sad songs"]
+    }
 }
 
 # Dil bazlı ek sorgular
@@ -415,19 +431,28 @@ def _build_track_query(mood_category: str, lang: str, search_query: str, genre: 
 
     # 2) Genre + mood bazlı sorgu (GENRE İLK SIRADA)
     genre_key = genre.lower() if genre else ""
-    if genre_key and genre_key in MOOD_GENRE_QUERIES:
-        mood_queries = MOOD_GENRE_QUERIES[genre_key].get(mood_category, MOOD_GENRE_QUERIES[genre_key].get("chill", [genre_key]))
-        parts.append(random.choice(mood_queries))
-    elif genre_key:
-        parts.append(genre_key)
-        default_mood = MOOD_DEFAULT_QUERIES.get(mood_category, ["müzik"])
-        parts.append(random.choice(default_mood))
+    if genre_key:
+        if lang == "tr":
+            # Avoid English keywords from MOOD_GENRE_QUERIES
+            parts.append(f"türkçe {genre_key}")
+            default_mood_tr = MOOD_DEFAULT_QUERIES["tr"].get(mood_category, ["türkçe hit"])
+            mood_word = random.choice(default_mood_tr).replace("türkçe ", "")
+            parts.append(mood_word)
+        elif genre_key in MOOD_GENRE_QUERIES:
+            mood_queries = MOOD_GENRE_QUERIES[genre_key].get(mood_category, MOOD_GENRE_QUERIES[genre_key].get("chill", [genre_key]))
+            parts.append(random.choice(mood_queries))
+        else:
+            parts.append(genre_key)
+            default_mood_dict = MOOD_DEFAULT_QUERIES.get(lang, MOOD_DEFAULT_QUERIES["mixed"])
+            default_mood = default_mood_dict.get(mood_category, ["müzik"])
+            parts.append(random.choice(default_mood))
     else:
-        default_mood = MOOD_DEFAULT_QUERIES.get(mood_category, ["müzik"])
+        default_mood_dict = MOOD_DEFAULT_QUERIES.get(lang, MOOD_DEFAULT_QUERIES["mixed"])
+        default_mood = default_mood_dict.get(mood_category, ["müzik"])
         parts.append(random.choice(default_mood))
 
     # 3) Dil bazlı prefix (EN SONA — genre'yi bozmamak için)
-    if lang == "tr" and not search_query:
+    if lang == "tr" and not search_query and not genre_key:
         parts.append("türkçe")
 
     return " ".join(parts)
@@ -513,7 +538,8 @@ def _get_tracks(mood_category: str, lang: str, search_query: str, genre: str, li
 
     global SPOTIFY_RECOMMENDATIONS_SUPPORTED
     # Strateji 0: Spotify Recommendations API (Arama filtresi yoksa ve en kaliteli sonuçları istiyorsak)
-    if not search_query and SPOTIFY_RECOMMENDATIONS_SUPPORTED:
+    # TR dili için Recommendations API kullanılamaz çünkü dil filtresi yoktur, sadece bölge filtresi (market) vardır ve İngilizce popüler şarkılar da çıkar.
+    if not search_query and SPOTIFY_RECOMMENDATIONS_SUPPORTED and lang != "tr":
         try:
             logger.info(f"Using Spotify Recommendations API for mood='{mood_category}', lang='{lang}', genre='{genre}'")
             tracks = _get_recommendations_api(mood_category, lang, genre, limit)
@@ -565,11 +591,25 @@ def _get_tracks(mood_category: str, lang: str, search_query: str, genre: str, li
         return existing[:limit]
 
     # Strateji 3: Son çare — basit genre/mood araması
-    fallback_queries = [
-        genre or mood_category,
-        f"{genre} music" if genre else f"{mood_category} music",
-        "top hits türkçe" if lang == "tr" else "top hits",
-    ]
+    if lang == "tr":
+        tr_mood_map = {
+            "energetic": "hareketli",
+            "calm": "sakin",
+            "intense": "sert",
+            "chill": "rahatlatıcı",
+            "melancholic": "hüzünlü"
+        }
+        fallback_queries = [
+            f"türkçe {genre}" if genre else f"türkçe {tr_mood_map.get(mood_category, 'müzik')}",
+            f"{genre} türkçe" if genre else f"{tr_mood_map.get(mood_category, 'müzik')} türkçe",
+            "top hits türkçe",
+        ]
+    else:
+        fallback_queries = [
+            genre or mood_category,
+            f"{genre} music" if genre else f"{mood_category} music",
+            "top hits",
+        ]
     for fq in fallback_queries:
         if len(existing) >= limit:
             break
@@ -598,14 +638,14 @@ def _search_by_turkish_artists(mood_category: str, genre: str, limit: int, marke
     genre_key = genre.lower() if genre else "default"
     artist_pool = TR_ARTISTS.get(genre_key, TR_ARTISTS["default"])
 
-    # Rastgele 6 sanatçı seç
-    selected_artists = random.sample(artist_pool, min(3, len(artist_pool)))  # 4 → 3 sanatçı
+    # Rastgele 5 sanatçı seç
+    selected_artists = random.sample(artist_pool, min(5, len(artist_pool)))  # 3 -> 5 sanatçı
     all_tracks = []
 
     def _search_artist(a_name):
         try:
             query = f'artist:{a_name}'
-            search_kwargs = {"q": query, "type": "track", "limit": 4}  # 5 → 4 sonuç/sanatçı
+            search_kwargs = {"q": query, "type": "track", "limit": 10}  # 4 -> 10 sonuç/sanatçı
             if market:
                 search_kwargs["market"] = market
             results = _get_spotify_client().search(**search_kwargs)
@@ -615,9 +655,9 @@ def _search_by_turkish_artists(mood_category: str, genre: str, limit: int, marke
             logger.warning(f"Sanatçı araması başarısız '{a_name}': {e}")
             return []
 
-    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+    with concurrent.futures.ThreadPoolExecutor(max_workers=5) as executor:
         futures = [executor.submit(_search_artist, name) for name in selected_artists]
-        for future in concurrent.futures.as_completed(futures, timeout=3):  # 5s → 3s
+        for future in concurrent.futures.as_completed(futures, timeout=4):  # 3s -> 4s
             try:
                 all_tracks.extend(future.result())
             except Exception:
