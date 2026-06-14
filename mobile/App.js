@@ -10,13 +10,13 @@ export default function App() {
     <SafeAreaProvider>
       <SafeAreaView style={styles.container} edges={['top', 'bottom', 'left', 'right']}>
         <StatusBar barStyle="light-content" backgroundColor="#121212" />
-        <WebView 
+        <WebView
           ref={webViewRef}
           userAgent="localtunnel"
-          source={{ 
+          source={{
             uri: `https://silver-readers-fold.loca.lt?v=${Date.now()}`,
             headers: { 'Bypass-Tunnel-Reminder': 'true' }
-          }} 
+          }}
           style={styles.webview}
           // Enable camera/microphone in WebView for face/video analysis
           allowsInlineMediaPlayback={true}
@@ -24,8 +24,8 @@ export default function App() {
           domStorageEnabled={true}
           javaScriptEnabled={true}
           originWhitelist={['*']}
-          bounces={false}
-          overScrollMode="never"
+          bounces={true}
+          overScrollMode="always"
           showsVerticalScrollIndicator={false}
           showsHorizontalScrollIndicator={false}
           scrollEnabled={true}
@@ -42,6 +42,6 @@ const styles = StyleSheet.create({
   },
   webview: {
     flex: 1,
+    backgroundColor: 'transparent',
   },
-});
-// 
+}); 

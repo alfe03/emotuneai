@@ -155,7 +155,6 @@ body.theme-calm {
 html {
   font-size: 16px;
   scroll-behavior: smooth;
-  overscroll-behavior: none;
 }
 
 body {
@@ -167,7 +166,6 @@ body {
   line-height: 1.6;
   min-height: 100vh;
   overflow-x: hidden;
-  overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
   transition: background-color 1.2s ease, color 0.5s ease;
 }
@@ -194,7 +192,7 @@ body {
   min-height: 100vh;
   align-items: center;
   justify-content: center;
-  padding: 2rem;
+  padding: 1rem 2rem;
   position: relative;
   z-index: 1;
 }
@@ -211,7 +209,7 @@ body {
 
 .auth-logo {
   text-align: center;
-  margin-bottom: 2.5rem;
+  margin-bottom: 1.5rem;
 }
 
 .auth-logo h1 {
@@ -235,6 +233,131 @@ body {
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
   box-shadow: var(--shadow-md);
+}
+
+.auth-card-modern {
+  border-radius: 24px;
+  padding: 1.8rem 2.2rem;
+  width: 100%;
+  max-height: calc(100vh - 130px);
+  overflow-y: auto;
+}
+
+.auth-card-modern::-webkit-scrollbar {
+  width: 6px;
+}
+.auth-card-modern::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.2);
+  border-radius: 10px;
+}
+
+/* Tabs */
+.auth-tabs {
+  display: flex;
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 16px;
+  padding: 4px;
+  margin-bottom: 1.5rem;
+  border: 1px solid var(--border);
+}
+
+.auth-tab-btn {
+  flex: 1;
+  padding: 0.8rem;
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-weight: 600;
+  font-size: 0.95rem;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.auth-tab-btn.active {
+  background: var(--bg-card);
+  color: var(--text-primary);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  border: 1px solid var(--border);
+}
+
+/* Inputs */
+.auth-card-modern .form-group {
+  margin-bottom: 1.2rem;
+}
+
+.auth-card-modern .input-with-icon {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.auth-card-modern .input-with-icon svg {
+  position: absolute;
+  left: 1.2rem;
+  width: 20px;
+  height: 20px;
+  color: var(--text-secondary);
+  pointer-events: none;
+}
+
+.auth-card-modern .form-input {
+  width: 100%;
+  padding: 1.2rem 1rem 1.2rem 3.2rem;
+  background: #141414;
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  transition: all 0.2s ease;
+}
+
+.auth-card-modern .form-input:-webkit-autofill,
+.auth-card-modern .form-input:-webkit-autofill:hover, 
+.auth-card-modern .form-input:-webkit-autofill:focus, 
+.auth-card-modern .form-input:-webkit-autofill:active {
+  -webkit-box-shadow: 0 0 0 30px #141414 inset !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+  transition: background-color 5000s ease-in-out 0s;
+}
+
+.auth-card-modern .form-input:focus {
+  background: #1a1a1a;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(29, 185, 84, 0.2);
+}
+
+.auth-card-modern .form-input::placeholder {
+  color: var(--text-secondary);
+}
+
+/* Buttons */
+.btn-pill-primary {
+  background: var(--primary);
+  color: #ffffff;
+  border-radius: 20px;
+  padding: 1.2rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  transition: all 0.2s ease;
+  margin-top: 0.8rem;
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.btn-pill-primary:hover:not(:disabled) {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(29, 185, 84, 0.3);
+}
+
+.btn-pill {
+  border-radius: 20px;
+  padding: 1.2rem;
 }
 
 .card, .mood-tabs, .mood-textarea, .camera-placeholder, .stat-card, .chart-container-card, .profile-card, .custom-modal-card {

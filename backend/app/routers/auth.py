@@ -1,7 +1,7 @@
 import spotipy
 from spotipy.oauth2 import SpotifyOAuth
 from app.core.config import settings
-from fastapi import APIRouter, HTTPException, status, Depends, Request, UploadFile, File
+from fastapi import APIRouter, HTTPException, status, Depends, Request, UploadFile, File, BackgroundTasks
 from fastapi.responses import RedirectResponse
 import os
 import shutil
@@ -12,7 +12,8 @@ from urllib.parse import unquote, urlparse, parse_qsl, urlencode, urlunparse
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.services.auth_service import create_user, authenticate_user, create_access_token, get_user_by_email, get_user_by_id, decode_access_token, get_user_by_username, hash_password, verify_password
-from app.schemas.user import RegisterRequest, LoginRequest, TokenResponse, UserResponse, ChangePasswordRequest, UpdateProfileRequest
+from app.schemas.user import RegisterRequest, LoginRequest, TokenResponse, UserResponse, ChangePasswordRequest, UpdateProfileRequest, ForgotPasswordRequest, ResetPasswordRequest
+from app.services.email_service import send_welcome_email, send_reset_password_email
 from app.models.models import User
 import logging
 
@@ -167,14 +168,50 @@ def spotify_callback(request: Request, db: Session = Depends(get_db)):
         return RedirectResponse(url=build_redirect_url(frontend_url, {"error": "user_creation_failed"}))
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-def register(request: RegisterRequest, db: Session = Depends(get_db)):
+def register(request: RegisterRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     if get_user_by_email(db, request.email):
         raise HTTPException(status_code=400, detail="Bu email zaten kayıtlı")
     if get_user_by_username(db, request.username):
         raise HTTPException(status_code=400, detail="Bu kullanıcı adı zaten alınmış")
     user = create_user(db, request.email, request.username, request.password)
     token = create_access_token(cast(int, user.id))
+    
+    # Send welcome email in the background
+    background_tasks.add_task(send_welcome_email, user.email, user.username)
+    
     return {"access_token": token, "token_type": "bearer"}
+
+@router.post("/forgot-password")
+def forgot_password(request: ForgotPasswordRequest, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+    user = get_user_by_email(db, request.email)
+    if not user:
+        # We still return 200 so we don't leak which emails exist
+        return {"message": "Eğer e-posta sistemde kayıtlıysa, şifre sıfırlama bağlantısı gönderildi."}
+        
+    reset_token = create_access_token(cast(int, user.id))
+    background_tasks.add_task(send_reset_password_email, user.email, reset_token)
+    
+    return {"message": "Eğer e-posta sistemde kayıtlıysa, şifre sıfırlama bağlantısı gönderildi."}
+
+@router.post("/reset-password")
+def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
+    try:
+        user_id = decode_access_token(request.token)
+        if not user_id:
+            raise HTTPException(status_code=400, detail="Geçersiz veya süresi dolmuş bağlantı.")
+            
+        user = get_user_by_id(db, user_id)
+        if not user:
+            raise HTTPException(status_code=400, detail="Geçersiz veya süresi dolmuş bağlantı.")
+            
+        if len(request.new_password) < 6:
+            raise HTTPException(status_code=400, detail="Yeni şifre en az 6 karakter olmalıdır.")
+            
+        user.hashed_password = hash_password(request.new_password)
+        db.commit()
+        return {"message": "Şifreniz başarıyla değiştirildi. Yeni şifrenizle giriş yapabilirsiniz."}
+    except Exception:
+        raise HTTPException(status_code=400, detail="Geçersiz veya süresi dolmuş bağlantı.")
 
 from app.core.limiter import limiter
 

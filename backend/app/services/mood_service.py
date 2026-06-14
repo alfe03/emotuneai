@@ -392,11 +392,13 @@ def _extract_artist_fallback(text: str) -> str | None:
             "burdan", "şurdan", "ondan", "bundan", "şundan", "bir", "ve", "veya", "ama", "fakat",
             "şarkı", "sarkı", "müzik", "muzik", "albüm", "album", "ses", "grup", "sanatçı", "sanatcı", 
             "şarkıcı", "sarkıcı", "sarkilar", "şarkılar", "sarkiları", "şarkıları",
-            "istiyorum", "isterim", "olsun", "çal", "çalsın", "calsın", "gelsin", "dinle", "dinlemek", "öner", "oner", "istediğim", "istedigim"
+            "istiyorum", "isterim", "olsun", "çal", "çalsın", "calsın", "gelsin", "dinle", "dinlemek", "öner", "oner", "istediğim", "istedigim",
+            "mis", "mıs", "mus", "müs", "misin", "mısın", "musun", "müsün", "önerir", "onerir", "verecek", "için", "icin", "gibi", "kadar",
+            "bana", "sana", "ona", "bize", "size", "onlara"
         }
         if candidate.lower() not in excluded_candidates and len(candidate) > 2:
             # Önündeki kelimeyi kontrol et (örn: "sezen aksu dan" -> "sezen" + "aksu")
-            pos = text.find(candidate)
+            pos = text_lower.find(full_match)
             before = text[:pos].strip()
             before_words = before.split()
             if before_words:
@@ -417,11 +419,12 @@ def _extract_artist_fallback(text: str) -> str | None:
             words = before.split()
             if words:
                 stopwords = {
-                    "bir", "biraz", "ve", "veya", "da", "de", "ki", "ben", "sen", "bana", "bi", "daha",
+                    "bir", "biraz", "ve", "veya", "da", "de", "ki", "ben", "sen", "bana", "sana", "bi", "daha",
                     "şöyle", "böyle", "kendi", "güzel", "hareketli", "sakin", "yavaş", "hızlı", "hüzünlü",
                     "şarkı", "sarkı", "müzik", "muzik", "albüm", "album", "ses", "grup", "sanatçı", "sanatcı", 
                     "şarkıcı", "sarkıcı", "dan", "den", "tan", "ten", "sarkilar", "şarkılar", "sarkiları", "şarkıları",
-                    "istiyorum", "istiyorum.", "olsun", "çalsın", "gelsin"
+                    "istiyorum", "istiyorum.", "olsun", "çalsın", "gelsin", "önerir", "onerir", "misin", "mısın",
+                    "verecek", "için", "icin", "gibi", "kadar"
                 }
                 last_word = words[-1].strip(".,?!\"'()")
                 if last_word.lower() not in stopwords and len(last_word) > 2:

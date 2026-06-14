@@ -94,6 +94,20 @@ class EmoTuneAPI {
     });
   }
 
+  async forgotPassword(email) {
+    return this.request("/api/auth/forgot-password", {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    });
+  }
+
+  async resetPassword(token, newPassword) {
+    return this.request("/api/auth/reset-password", {
+      method: "POST",
+      body: JSON.stringify({ token, new_password: newPassword }),
+    });
+  }
+
   async uploadAvatar(file) {
     const formData = new FormData();
     formData.append("file", file);
