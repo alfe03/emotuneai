@@ -341,30 +341,22 @@ function setupMoodActions() {
 
   // Text analysis
   const moodTextarea = document.getElementById("mood-text-input");
-  if (moodTextarea) {
-    const autoResize = () => {
-      moodTextarea.style.height = "auto";
-      moodTextarea.style.height = `${moodTextarea.scrollHeight}px`;
-    };
-    autoResize();
-    moodTextarea.addEventListener("input", autoResize);
-  }
 
-  document.getElementById("btn-analyze-text").addEventListener("click", async () => {
+  document.getElementById("btn-analyze-text").addEventListener("click", async (e) => {
     const text = document.getElementById("mood-text-input").value.trim();
     if (text.length < 3) {
       showToast("Lütfen en az 3 karakter girin.", "warning");
       return;
     }
-    await performAnalysis(() => api.analyzeText(text, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre));
+    await performAnalysis(() => api.analyzeText(text, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre), e.currentTarget);
   });
 
   // Manual mood
   document.querySelectorAll("[data-mood]").forEach((btn) => {
-    btn.addEventListener("click", async () => {
+    btn.addEventListener("click", async (e) => {
       const mood = btn.dataset.mood;
       lastSearchQuery = ""; // Yeni mood seçildiğinde aramayı sıfırla
-      await performAnalysis(() => api.manualMood(mood, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre));
+      await performAnalysis(() => api.manualMood(mood, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre), e.currentTarget);
     });
   });
 }
@@ -374,7 +366,11 @@ function setupLanguageFilter() {
   // Bu fonksiyon artık boş — filtreler sonuç barında dinamik olarak oluşturuluyor
 }
 
-async function performAnalysis(analysisFn) {
+async function performAnalysis(analysisFn, triggerBtn = null) {
+  if (triggerBtn) {
+    triggerBtn.classList.add("loading");
+    triggerBtn.disabled = true;
+  }
   const resultsSection = document.getElementById("results-section");
   resultsSection.style.display = ""; // Daha önce gizlendiyse (display: none) temizle
   resultsSection.innerHTML = `
@@ -425,6 +421,11 @@ async function performAnalysis(analysisFn) {
     errDiv.appendChild(msg);
     resultsSection.innerHTML = "";
     resultsSection.appendChild(errDiv);
+  } finally {
+    if (triggerBtn) {
+      triggerBtn.classList.remove("loading");
+      triggerBtn.disabled = false;
+    }
   }
 }
 
@@ -590,11 +591,18 @@ function renderResults(data) {
         </div>
       </div>
       <div class="filter-divider"></div>
+      ${lastRequestedArtist ? `
+      <div class="filter-group">
+        <button class="filter-chip active" style="background: var(--primary); border-color: var(--primary); color: #fff; cursor: default; padding-left: 1.2rem; padding-right: 1.2rem;">🎤 Sadece ${DOMPurify.sanitize(lastRequestedArtist)}</button>
+        <button class="filter-chip" id="btn-clear-artist" style="opacity: 0.9;">Tüm Sanatçılar</button>
+      </div>
+      ` : `
       <div class="filter-group">
         <button class="filter-chip ${selectedLanguage === 'tr' ? 'active' : ''}" data-lang="tr">Türkçe</button>
         <button class="filter-chip ${selectedLanguage === 'mixed' ? 'active' : ''}" data-lang="mixed">Karışık</button>
         <button class="filter-chip ${selectedLanguage === 'en' ? 'active' : ''}" data-lang="en">Yabancı</button>
       </div>
+      `}
     </div>
 
     <div id="results-content-area" class="tracks-grid"></div>
@@ -666,6 +674,18 @@ function renderResults(data) {
         selectedGenre = opt.dataset.value;
         refetchRecommendations();
       });
+    });
+  }
+
+  // Clear artist event listener
+  const btnClearArtist = document.getElementById("btn-clear-artist");
+  if (btnClearArtist) {
+    btnClearArtist.addEventListener("click", () => {
+      lastRequestedArtist = null;
+      lastSearchQuery = "";
+      const searchInput = document.getElementById("results-search-input");
+      if (searchInput) searchInput.value = "";
+      refetchRecommendations();
     });
   }
 
@@ -873,7 +893,7 @@ async function startCamera() {
   try {
     cameraStream = await navigator.mediaDevices.getUserMedia({ 
       video: { facingMode: "user", width: 640, height: 480 },
-      audio: true
+      audio: false
     });
     video.srcObject = cameraStream;
     video.classList.add("active");
@@ -923,7 +943,7 @@ async function captureAndAnalyze() {
   lastSearchQuery = ""; // Kameradan yüz arandığında aramayı sıfırla
   
   try {
-    await performAnalysis(() => api.analyzeFace(base64, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre));
+    await performAnalysis(() => api.analyzeFace(base64, selectedLanguage, selectedContentType, lastSearchQuery, selectedGenre), document.getElementById("btn-capture"));
     // Başarılı analizden sonra kamera alanını gizle
     const cameraArea = document.querySelector("#panel-face .camera-area");
     const cameraControls = document.querySelector("#panel-face .camera-controls");
@@ -1859,14 +1879,64 @@ function loadProfilePage() {
   
   updateAvatarPreview(api.getAvatar() || currentUser.avatar_url);
 
-  // Preview chosen file instantly
-  avatarFileInput.onchange = () => {
-    if (avatarFileInput.files && avatarFileInput.files[0]) {
+  // Global variable to hold the resized file
+  let resizedAvatarFile = null;
+
+  function resizeImageFile(file, maxWidth, maxHeight) {
+    return new Promise((resolve) => {
       const reader = new FileReader();
       reader.onload = (e) => {
-        avatarPreview.innerHTML = `<img src="${e.target.result}" alt="Avatar" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+        const img = new Image();
+        img.onload = () => {
+          let width = img.width;
+          let height = img.height;
+          
+          if (width > maxWidth || height > maxHeight) {
+            const ratio = Math.min(maxWidth / width, maxHeight / height);
+            width = width * ratio;
+            height = height * ratio;
+          }
+          
+          const canvas = document.createElement("canvas");
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext("2d");
+          ctx.drawImage(img, 0, 0, width, height);
+          
+          canvas.toBlob((blob) => {
+            resolve(new File([blob], file.name, { type: file.type || "image/jpeg" }));
+          }, file.type || "image/jpeg", 0.85); // Compress quality to 85%
+        };
+        img.src = e.target.result;
       };
-      reader.readAsDataURL(avatarFileInput.files[0]);
+      reader.readAsDataURL(file);
+    });
+  }
+
+  // Preview chosen file instantly and compress it
+  avatarFileInput.onchange = async () => {
+    if (avatarFileInput.files && avatarFileInput.files[0]) {
+      const originalFile = avatarFileInput.files[0];
+      
+      // Temporarily show a loading state in avatar preview
+      avatarPreview.innerHTML = '<span class="spinner" style="border-top-color: var(--primary);"></span>';
+      
+      try {
+        // Resize to max 500x500 for avatar
+        resizedAvatarFile = await resizeImageFile(originalFile, 500, 500);
+        
+        // Show preview of resized file
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          avatarPreview.innerHTML = `<img src="${e.target.result}" alt="Avatar" style="width: 100%; height: 100%; object-fit: cover; border-radius: 50%;">`;
+        };
+        reader.readAsDataURL(resizedAvatarFile);
+      } catch (err) {
+        console.error("Fotoğraf sıkıştırma hatası:", err);
+        showToast("Fotoğraf işlenirken bir hata oluştu.", "error");
+        updateAvatarPreview(api.getAvatar() || currentUser.avatar_url);
+        avatarFileInput.value = "";
+      }
     }
   };
 
@@ -1901,8 +1971,8 @@ function loadProfilePage() {
     saveProfileBtn.innerHTML = '<span class="spinner"></span> Kaydediliyor...';
     try {
       // Handle avatar upload if file is selected
-      if (avatarFileInput.files && avatarFileInput.files[0]) {
-        const uploadRes = await api.uploadAvatar(avatarFileInput.files[0]);
+      if (resizedAvatarFile) {
+        const uploadRes = await api.uploadAvatar(resizedAvatarFile);
         currentUser.avatar_url = uploadRes.avatar_url;
         api.setAvatar(uploadRes.avatar_url || "");
       }
@@ -1930,6 +2000,7 @@ function loadProfilePage() {
       saveProfileBtn.disabled = false;
       saveProfileBtn.textContent = "Bilgileri Kaydet";
       avatarFileInput.value = ""; // clear file input
+      resizedAvatarFile = null; // clear resized file
     }
   };
 
