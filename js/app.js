@@ -1690,7 +1690,7 @@ async function startVoiceRecord() {
       const cancelBtn = document.getElementById("btn-mic-cancel");
       if (cancelBtn) cancelBtn.style.display = "none";
 
-      if (voiceChunks.length === 0) {
+      if (voiceChunks.length === 0 || voiceRecorder.isCancelled) {
         micBtn.classList.remove("recording");
         if (visualizer) visualizer.classList.remove("active");
         if (timerEl) timerEl.style.display = "none";
@@ -1820,6 +1820,7 @@ function stopVoiceRecord(cancel = false) {
     if (cancel) {
       voiceChunks = [];
     }
+    voiceRecorder.isCancelled = cancel;
     voiceRecorder.stop();
     // Do not set voiceRecorder = null here, it breaks onstop execution.
   }
@@ -2025,6 +2026,47 @@ function closeExportModal() {
   const modal = document.getElementById("spotify-export-modal");
   if (modal) modal.classList.remove("active");
 }
+
+function showConfirmModal(title, message, confirmBtnText = "Sil") {
+  return new Promise((resolve) => {
+    const modal = document.getElementById("custom-confirm-modal");
+    if (!modal) return resolve(confirm(message)); // Fallback if modal not found
+
+    const titleEl = document.getElementById("confirm-modal-title");
+    const msgEl = document.getElementById("confirm-modal-message");
+    const btnCancel = document.getElementById("btn-confirm-cancel");
+    const btnOk = document.getElementById("btn-confirm-ok");
+    const btnClose = document.getElementById("btn-close-confirm-modal");
+
+    if (titleEl) titleEl.textContent = title;
+    if (msgEl) msgEl.textContent = message;
+    if (btnOk) btnOk.textContent = confirmBtnText;
+
+    modal.classList.add("active");
+
+    const cleanup = () => {
+      modal.classList.remove("active");
+      btnCancel.removeEventListener("click", onCancel);
+      btnClose.removeEventListener("click", onCancel);
+      btnOk.removeEventListener("click", onOk);
+    };
+
+    const onCancel = () => {
+      cleanup();
+      resolve(false);
+    };
+
+    const onOk = () => {
+      cleanup();
+      resolve(true);
+    };
+
+    btnCancel.addEventListener("click", onCancel);
+    btnClose.addEventListener("click", onCancel);
+    btnOk.addEventListener("click", onOk);
+  });
+}
+
 
 function loadProfilePage() {
   if (!currentUser) return;
@@ -2366,7 +2408,12 @@ async function loadSavedPlaylists() {
 }
 
 async function deleteSavedPlaylist(id, btn) {
-  if (!confirm("Bu çalma listesini silmek istediğinize emin misiniz?")) return;
+  const confirmed = await showConfirmModal(
+    "Silmeyi Onayla", 
+    "Bu çalma listesini silmek istediğinize emin misiniz?",
+    "Sil"
+  );
+  if (!confirmed) return;
 
   const card = btn.closest(".playlist-card");
   card.style.opacity = "0.5";

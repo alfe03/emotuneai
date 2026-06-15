@@ -510,6 +510,25 @@
     </div>
   </div>
 
+  <!-- Generic Confirm Modal -->
+  <div class="custom-modal-backdrop" id="custom-confirm-modal">
+    <div class="custom-modal-card">
+      <div class="modal-header">
+        <h3 class="modal-title" id="confirm-modal-title">Emin misiniz?</h3>
+        <button class="modal-close-btn" id="btn-close-confirm-modal">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"></line><line x1="6" y1="6" x2="18" y2="18"></line></svg>
+        </button>
+      </div>
+      <div class="modal-body">
+        <p id="confirm-modal-message" style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1.5rem;">Bu işlemi gerçekleştirmek istediğinize emin misiniz?</p>
+      </div>
+      <div class="modal-footer" style="display: flex; gap: 1rem; width: 100%;">
+        <button class="btn btn-secondary" id="btn-confirm-cancel" style="flex: 1; margin: 0; background: var(--bg-card); color: var(--text-primary); border: 1px solid var(--border);">İptal</button>
+        <button class="btn btn-primary" id="btn-confirm-ok" style="flex: 1; margin: 0; background: var(--error, #ff5252);">Sil</button>
+      </div>
+    </div>
+  </div>
+
   <!-- Toast Container -->
   <div id="toast-container" class="toast-container"></div>
 
