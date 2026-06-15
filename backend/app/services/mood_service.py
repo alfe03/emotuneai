@@ -382,7 +382,9 @@ def _extract_artist_fallback(text: str) -> str | None:
         
         excluded_full = {
             "sakin", "gergin", "üzgün", "yorgun", "kızgın", "kesin", "serin", "derin", "zaten", "hemen", 
-            "aniden", "birden", "lütfen", "bazen", "dünden", "yoldan", "candan", "tenden", "günden"
+            "aniden", "birden", "lütfen", "bazen", "dünden", "yoldan", "candan", "tenden", "günden",
+            "bugün", "bugun", "için", "icin", "yarın", "yarin", "bütün", "butun", "yakın", "yakin",
+            "uzun", "oyun", "koyun", "boyun", "kadın", "kadin", "altın", "altin", "aydın", "aydin"
         }
         if full_match in excluded_full:
             continue
@@ -446,12 +448,25 @@ def _fallback_analyze_text(text: str) -> dict:
 
     # ── 1) Her mood kategorisi için skor hesapla ──
     scores = {}
+    
+    # "iyi", "mutlu" gibi kelimeleri tersine çevirmek için negasyon kontrolü
+    negation_words = ["değil", "hissetmiyor", "yok", "hiç", "kötü"]
+    has_negation = any(nw in text_lower for nw in negation_words)
+
     for mood, data in KEYWORD_MOODS.items():
         score = 0
         for kw in data["keywords"]:
             if kw in text_lower:
+                if has_negation and mood in ("energetic", "chill") and kw in ("iyi", "mutlu", "harika", "süper", "güzel", "rahat", "huzurlu"):
+                    continue # Eğer negasyon varsa pozitif kelimelerden puan verme
                 score += 1
         scores[mood] = score
+
+    # Eğer cümlede belirgin bir negasyon varsa ama hiçbir olumsuz kelime (üzgün vb.) geçmiyorsa
+    # varsayılan olarak melankolik ağırlık verelim ki yanlışlıkla 0 puan alıp chill'e düşmesin.
+    if has_negation and scores.get("melancholic", 0) == 0 and scores.get("intense", 0) == 0:
+        scores["melancholic"] += 2
+
 
     # ── 2) Zıtlık kelimelerini kontrol et ──
     # "ama", "fakat" gibi kelimelerden SONRA gelen duyguya ekstra ağırlık ver
@@ -552,7 +567,7 @@ def _fallback_analyze_text(text: str) -> dict:
         }
         emotion = _SINGLE_EMOTIONS.get(primary_mood, chosen["label"])
         emoji = chosen["emoji"]
-        explanation = "⚡ Gemini API şu an kullanılamadığı için basit analiz kullanıldı."
+        explanation = ""
 
     return {
         "emotion":          emotion,
@@ -607,7 +622,7 @@ def analyze_text(text: str) -> dict:
         if mood_category not in ("energetic", "chill", "melancholic", "intense", "calm"):
             mood_category = "chill"
 
-        requested_artist = result.get("requested_artist") or _extract_artist_fallback(text)
+        requested_artist = result.get("requested_artist")
         logger.info("Metin analizi Gemini ile tamamlandı.")
         return {
             "emotion":          result.get("emotion", "belirsiz"),
@@ -628,6 +643,8 @@ def analyze_text(text: str) -> dict:
         return _fallback_analyze_text(text)
 
     except Exception as e:
+        with open('gemini_error_log.txt', 'a', encoding='utf-8') as f:
+            f.write(f"ERROR: {str(e)}\n")
         error_str = str(e).lower()
         if _is_fatal_gemini_error(error_str):
             # Geçersiz key → kalıcı kapat
@@ -724,7 +741,7 @@ def _video_fallback_with_deepface(video_bytes: bytes) -> dict:
             "confidence": round(confidence, 2),
             "mood_category": mood_category,
             "input_text": "",
-            "explanation": "⚡ Gemini API şu an kullanılamadığı için sadece yüz ifadesi analizi yapıldı (ses analizi devre dışı)."
+            "explanation": ""
         }
     finally:
         if os.path.exists(tmp_path):
@@ -962,8 +979,6 @@ def analyze_audio(audio_bytes: bytes) -> dict:
 
         # Şarkı araması yaparken faydalanmak üzere requested_artist ayıklaması
         requested_artist = result.get("requested_artist")
-        if not requested_artist:
-            requested_artist = _extract_artist_fallback(input_text)
 
         return {
             "emotion": emotion,
